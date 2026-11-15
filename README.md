@@ -1,6 +1,6 @@
 # Stillwander
 
-A relaxing open-world wander through seven pastel biomes. Single-file WebGL game (three.js).
+A relaxing open-world wander through seven feudal-Japan-inspired lands. Single-file WebGL game (three.js).
 
 Open `index.html`, or play it on GitHub Pages.
 
