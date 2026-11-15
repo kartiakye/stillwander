@@ -4,4 +4,4 @@ A relaxing open-world wander through seven feudal-Japan-inspired lands. Single-f
 
 Open `index.html`, or play it on GitHub Pages.
 
-Controls: click or hold to walk (or W A S D), Space to hum, Q / E to turn, scroll to zoom, M for sound.
+Controls: click or hold to walk (or W A S D), F to slash (cuts trees, bamboo and shrubs for wood, bamboo and straw), Space to hum, Q / E to turn, scroll to zoom, M for sound.
