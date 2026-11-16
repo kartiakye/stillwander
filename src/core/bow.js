@@ -46,7 +46,8 @@ export class Bow {
     const blessing = this.selected && this.charges > 0 ? this.selected : null;
     if (blessing) this.charges -= 1;
     const arrow = new Arrow(owner, owner.x, owner.z, angle, this.power, blessing);
-    if (blessing && this.has(Wind)) Wind.makeSteerable(arrow);   // every blessed arrow can be steered
+    // Once the wind is bound, every blessed arrow can be steered (a hawk arrow steers itself).
+    if (blessing && this.has(Wind) && !arrow.seeks) Wind.makeSteerable(arrow);
     this.cancel();
     return arrow;
   }

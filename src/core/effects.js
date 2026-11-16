@@ -46,3 +46,11 @@ export class Blinded extends Effect {
   blocksAim = true;
   constructor(duration = 4) { super(duration); }
 }
+
+// A Hollow lulled by a bloom forgets to fight while it stands in the flowers.
+export class Lulled extends Effect {
+  static label = 'lulled';
+  speedScale = 0;
+  blocksAction = true;
+  constructor(duration = 1) { super(duration); }
+}

@@ -1,10 +1,20 @@
 // World: everything alive in the scene, and the rules for how they meet.
 // The renderer reads this object and drains `events`; it never changes the rules.
 import { Archer } from './archer.js';
+import { Lulled } from './effects.js';
 
 // A tree trunk or rock placed by hand: stops arrows and feet.
 export class Obstacle {
   constructor(x, z, radius = 0.4) { this.x = x; this.z = z; this.radius = radius; }
+}
+
+// Grace: a ring of flowers left by a Bloom arrow.
+export class Grace {
+  static RADIUS = 3;
+  static LIFE = 7;
+  static MEND = 1.6;         // seconds per petal mended
+  constructor(x, z) { this.x = x; this.z = z; this.radius = Grace.RADIUS; this.left = Grace.LIFE; this.mend = Grace.MEND; }
+  contains(c) { return Math.hypot(c.x - this.x, c.z - this.z) <= this.radius; }
 }
 
 export class StuckArrow {
@@ -40,6 +50,7 @@ export class World {
     this.obstacles = [];
     this.wind = [0, 0];          // sideways push on unblessed arrows, tiles/second
     this.wet = false;            // rain or marsh: thunder reaches further
+    this.graces = [];
     this.events = [];
   }
 
@@ -108,6 +119,7 @@ export class World {
   }
   landArrow(arrow) {             // it stops, and may be left standing to pick up
     arrow.flying = false;
+    if (arrow.blessing) arrow.blessing.onLand(arrow, this);
     if (arrow.owner === this.archer && arrow.recoverable && this.random() >= World.BREAK_CHANCE) {
       const s = new StuckArrow(arrow.x, arrow.z);
       this.stuck.push(s);
@@ -125,6 +137,27 @@ export class World {
     this.stuck = keep;
   }
 
+  // ---- graces
+  addGrace(x, z) {
+    const g = new Grace(x, z);
+    this.graces.push(g);
+    this.emit('grace', g);
+    return g;
+  }
+  updateGraces(dt) {
+    const a = this.archer;
+    for (const g of this.graces) {
+      g.left -= dt;
+      if (a.alive && g.contains(a) && a.hp < a.maxHp) {
+        g.mend -= dt;
+        if (g.mend <= 0) { g.mend = Grace.MEND; a.hp = Math.min(a.maxHp, a.hp + 1); this.emit('mend', a); }
+      }
+      for (const h of this.hollows) if (h.alive && g.contains(h)) h.addEffect(new Lulled(0.4));
+    }
+    for (const g of this.graces) if (g.left <= 0) this.emit('graceEnd', g);
+    this.graces = this.graces.filter(g => g.left > 0);
+  }
+
   // ---- time
   update(dt) {
     this.time += dt;
@@ -136,6 +169,7 @@ export class World {
     }
     for (const arrow of this.arrows) arrow.update(dt, this);
     this.arrows = this.arrows.filter(a => a.flying);
+    this.updateGraces(dt);
     if (this.archer.alive) this.pickUpArrows();
   }
 }

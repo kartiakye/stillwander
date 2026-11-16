@@ -56,6 +56,7 @@ export class Archer extends Character {
     arrow.height = world.heightAt(this.x, this.z) + 1;
     world.arrows.push(arrow);
     world.emit('loose', arrow);
+    if (arrow.blessing) arrow.blessing.onRelease(arrow, world);
     return arrow;
   }
 

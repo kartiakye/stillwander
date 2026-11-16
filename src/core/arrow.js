@@ -26,6 +26,7 @@ export class Arrow {
     this.guardBreak = false;            // goes through a raised guard
     this.shatters = this.power >= Arrow.FULL_DRAW;   // breaks a frozen target
     this.recoverable = true;
+    this.seeks = false;                 // steers itself towards prey
     this.height = 0;                    // how high it flies; set when it is loosed
     this.struck = [];
     this.flying = true;
