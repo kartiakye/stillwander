@@ -4,7 +4,8 @@
 import { engine, hooks } from './engine.js';
 import { World } from './core/world.js';
 import { Target } from './core/target.js';
-import { Wind } from './core/blessing.js';
+import { Wind, Hawk, LAND_BLESSINGS } from './core/blessing.js';
+import { Burning, Chilled, Frozen, Stunned, Blinded, Lulled } from './core/effects.js';
 import { Inventory } from './core/inventory.js';
 
 const { T, scene, P, player, worldMat, Geo, TP, M, hex, colours } = engine;
@@ -14,7 +15,18 @@ const STRAW = 2;                 // the engine's material slot for straw
 const SLOW = 0.55;               // the world's pace while a steered arrow flies
 const RESPAWN = 10;              // seconds before a fallen target stands again
 const SAVE_KEY = 'stillwander-bow2-kit';
-const TINT = { wind: hex(0xbfefff), fire: hex(0xffa060), thunder: hex(0xfff08a), frost: hex(0xd8ecff) };
+const TINT = { wind: hex(0xbfefff), fire: hex(0xffa060), thunder: hex(0xfff08a), frost: hex(0xd8ecff),
+  split: hex(0xa8e890), hawk: hex(0xff6a4a), bloom: hex(0xffb0c8) };
+// What each shrine says as it blesses the bow.
+const GIFT = {
+  wind: 'The wind obeys the bow. Loose a Wind arrow, then lead it with the pointer.',
+  fire: 'The Golden Wood sets the bow alight. Fire arrows burn, spread to those close by, and break a raised guard.',
+  split: 'Bamboo grows in clusters. Split arrows leave the string as three.',
+  frost: 'Snow Crest cools the string. Frost slows a foe, a second arrow freezes it, a full draw shatters it.',
+  thunder: 'The marsh hums with storm. Thunder leaps to three more and stuns them, further in wet ground.',
+  hawk: 'Crimson Vale gives the hawk\'s eye. Hawk arrows find their own prey.',
+  bloom: 'Blossom Field opens. Where a Bloom arrow falls, flowers mend you and lull whatever stands among them.',
+};
 
 // Engine angles are measured from +z (three.js facing); the rules measure from +x.
 const toEngine = a => PI / 2 - a;
@@ -109,16 +121,17 @@ function drawRibbon(r, y) {
 }
 
 // ---- practice ground: straw figures near the start -----------------------------
-function placeTargets() {
-  const home = terrain.height(P.x, P.z);
-  [7.5, 10, 12.5, 9, 14].forEach((r, i) => {
-    let ang = -0.4 + i * 0.62, x = 0, z = 0;
-    for (let k = 0; k < 14; k++) {      // walk round until the tile is open and level with the start
-      x = Math.floor(P.x + Math.cos(ang) * r) + 0.5; z = Math.floor(P.z + Math.sin(ang) * r) + 0.5;
-      if (terrain.height(x, z) === home && !terrain.blocked(x, z) && terrain.height(x, z) >= 0) break;
+function placeTargets(cx = P.x, cz = P.z, radii = [7.5, 10, 12.5, 9, 14]) {
+  const home = terrain.height(cx, cz);
+  radii.forEach((r, i) => {
+    let ang = -0.4 + i * 0.62, x = 0, z = 0, ok = false;
+    for (let k = 0; k < 24 && !ok; k++) {   // walk round until the tile is open and near the centre's height
+      x = Math.floor(cx + Math.cos(ang) * r) + 0.5; z = Math.floor(cz + Math.sin(ang) * r) + 0.5;
+      const h = terrain.height(x, z);
+      ok = Math.abs(h - home) <= 1 && h >= 0 && !terrain.blocked(x, z) && !world.hollows.some(t => Math.hypot(t.x - x, t.z - z) < 2);
       ang += 0.21;
     }
-    world.hollows.push(new Target(x, z));
+    if (ok) world.hollows.push(new Target(x, z));
   });
 }
 
@@ -128,7 +141,7 @@ function aimAngle() {
   const p = pointer || { x: archer.x + Math.cos(archer.facing), z: archer.z + Math.sin(archer.facing) };
   return Math.atan2(p.z - archer.z, p.x - archer.x);
 }
-function steered() { return world.arrows.filter(a => a.steerable && a.owner === archer && a.flying); }
+function steered() { return world.arrows.filter(a => a.steerable && !a.seeks && a.owner === archer && a.flying); }
 
 hooks.pointer = (kind, hit, button) => {
   if (hit) pointer = hit;
@@ -189,10 +202,12 @@ hooks.speed = () => archer.bow.drawing ? 0.45 : 1;
 hooks.face = () => (archer.bow.drawing || steered().length) ? toEngine(aimAngle()) : null;
 hooks.timeScale = () => steered().length ? SLOW : 1;
 
-hooks.awaken = () => {          // a woken shrine blesses the bow, never the archer
-  if (archer.bow.bind(new Wind())) {
-    archer.bow.select(Wind);
-    setTimeout(() => engine.say('The wind obeys the bow. Loose, then lead the arrow with the pointer. T changes arrow.', 9), 2600);
+hooks.awaken = th => {          // a woken shrine blesses the bow, never the archer
+  const Kind = LAND_BLESSINGS[th.st.b];
+  if (archer.bow.bind(new Kind())) {
+    archer.bow.select(Kind);
+    setTimeout(() => engine.say(GIFT[Kind.label] + ' T changes arrow.', 10), 2600);
+    placeTargets(th.x, th.z, [7, 9.5, 12, 8.5]);     // a practice ground round the shrine
   } else archer.bow.recharge(3);
   hudKit(true);
 };
@@ -209,16 +224,18 @@ hooks.update = (dt, time) => {
   archer.x = P.x; archer.z = P.z;
   if (hooks.face() === null && !archer.sidestepping) archer.facing = fromEngine(P.face);
   for (const a of steered()) if (pointer) a.steerTowards(pointer.x, pointer.z);
+  world.wet = engine.land === 4;           // the marsh carries thunder further
   world.update(dt);
   P.x = archer.x; P.z = archer.z;          // a sidestep moves the wanderer
   for (const [kind, data] of world.drainEvents()) onEvent(kind, data);
-  drawBow(); drawAim(); drawArrows(); drawStuck(); drawFigures(dt);
+  drawBow(); drawAim(); drawArrows(); drawStuck(); drawFigures(dt); drawMarks(dt, time); drawFx(dt);
   saveT += dt; if (saveT > 6) { saveT = 0; save(); }
 };
 
 function onEvent(kind, data) {
   if (kind === 'loose') {
     const fromArcher = data[0].owner === archer;
+    if (data[0].sibling) return;          // a split arrow's twins share its sound
     engine.noise({ f0: 2600, f1: 900, dur: 0.16, vol: fromArcher ? 0.09 : 0.05, type: 'highpass' });
     engine.tone({ f0: 520, f1: 210, dur: 0.14, vol: 0.06, type: 'triangle' });
     hudKit();
@@ -229,6 +246,7 @@ function onEvent(kind, data) {
     engine.noise({ f0: 1500, f1: 400, dur: 0.08, vol: 0.08, type: 'lowpass' });
     engine.burst(who.x, terrain.height(who.x, who.z) + 1.1, who.z, 5, 1.6);
     if (res.blocked) engine.say('Turned aside.', 1);
+    if (arrow.blessing && !res.blocked) blessedHit(arrow.blessing.label, who);
   } else if (kind === 'arrowStuck' || kind === 'arrowBroke') {
     engine.noise({ f0: 900, f1: 260, dur: 0.07, vol: 0.05, type: 'lowpass' });
   } else if (kind === 'pickup') {
@@ -236,6 +254,19 @@ function onEvent(kind, data) {
     hudKit(true);
   } else if (kind === 'death') {
     engine.bloomRing(data[0].x, data[0].z, 0.4, 1.6, 6, engine.land);
+  } else if (kind === 'chain') {
+    thunder(data[0], data[1]);
+  } else if (kind === 'steam') {
+    const [x, z] = data, y = terrain.height(x, z);
+    engine.leafBurst(x, y + 1, z, 12, [1, 1, 1], 1.4);
+    engine.pulse(x, y, z, 4, 1.2, 0xffffff);
+    engine.noise({ f0: 3000, f1: 800, dur: 0.6, vol: 0.06, type: 'highpass' });
+    engine.say('Fire on frost: the steam blinds them.', 2);
+  } else if (kind === 'grace') {
+    grace(data[0]);
+  } else if (kind === 'mend') {
+    engine.pluck(76, { vol: 0.08, dur: 1.4 });
+    engine.burst(P.x, P.y + 0.8, P.z, 4, 0.8);
   }
 }
 
@@ -349,7 +380,8 @@ function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
       arrows: archer.inventory.arrows,
-      wind: archer.bow.has(Wind),
+      blessings: archer.bow.blessings.map(b => b.label),
+      selected: archer.bow.selected ? archer.bow.selected.label : null,
       charges: archer.bow.charges,
     }));
   } catch (_) { /* storage unavailable: play on without it */ }
@@ -359,9 +391,132 @@ function load() {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
     if (!s) return;
     archer.inventory.arrows = s.arrows;
-    if (s.wind) { archer.bow.bind(new Wind()); archer.bow.charges = s.charges; archer.bow.select(Wind); }
+    for (const label of s.blessings || []) {
+      const Kind = LAND_BLESSINGS.find(K => K.label === label);
+      if (Kind) archer.bow.bind(new Kind());
+    }
+    archer.bow.charges = s.charges || 0;
+    const sel = LAND_BLESSINGS.find(K => K.label === s.selected);
+    archer.bow.select(sel || null);
   } catch (_) { /* a broken save is ignored */ }
 }
 addEventListener('pagehide', save);
 
 export { world };
+
+// ---- what each blessing looks like ------------------------------------------------
+const fx = [];                 // short-lived effect meshes: { obj, life, age, tick }
+function addFx(obj, life, tick) { scene.add(obj); fx.push({ obj, life, age: 0, tick }); }
+function drawFx(dt) {
+  for (let i = fx.length - 1; i >= 0; i--) {
+    const f = fx[i];
+    f.age += dt;
+    if (f.tick) f.tick(f, Math.min(1, f.age / f.life));
+    if (f.age >= f.life) { scene.remove(f.obj); fx.splice(i, 1); }
+  }
+}
+
+function blessedHit(label, who) {
+  const y = terrain.height(who.x, who.z);
+  if (label === 'fire') {
+    engine.leafBurst(who.x, y + 1.2, who.z, 10, [1, 0.55, 0.2], 1.8);
+    engine.noise({ f0: 900, f1: 200, dur: 0.5, vol: 0.08, type: 'lowpass' });
+  } else if (label === 'frost') {
+    engine.leafBurst(who.x, y + 1.2, who.z, 9, [0.82, 0.93, 1], 1.5);
+    engine.tone({ f0: 2400, f1: 3100, dur: 0.25, vol: 0.05, rev: 1 });
+    engine.tone({ f0: 1800, f1: 1700, dur: 0.4, vol: 0.03, delay: 0.06, rev: 1 });
+  } else if (label === 'hawk') {
+    engine.leafBurst(who.x, y + 1.2, who.z, 7, [1, 0.4, 0.3], 1.4);
+    engine.tone({ f0: 1700, f1: 2600, dur: 0.18, vol: 0.05 });
+  } else if (label === 'split') {
+    engine.leafBurst(who.x, y + 1.0, who.z, 5, [0.6, 0.85, 0.45], 1.2);
+  }
+}
+
+// Lightning: a jagged bolt from the sky to the first, then leaps to the rest.
+const boltMat = new T.MeshBasicMaterial({ color: 0xfff6c8, transparent: true, depthWrite: false });
+function bolt(a, b, group) {
+  const pts = [a];
+  for (let i = 1; i < 6; i++) {
+    const t = i / 6;
+    pts.push(new T.Vector3(a.x + (b.x - a.x) * t + (Math.random() - 0.5) * 0.7, a.y + (b.y - a.y) * t + (Math.random() - 0.5) * 0.4,
+      a.z + (b.z - a.z) * t + (Math.random() - 0.5) * 0.7));
+  }
+  pts.push(b);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p = pts[i], q = pts[i + 1], len = p.distanceTo(q);
+    const m = new T.Mesh(new T.CylinderGeometry(0.05, 0.05, len, 4), boltMat);
+    m.position.copy(p).add(q).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), q.clone().sub(p).normalize());
+    group.add(m);
+  }
+}
+function thunder(first, rest) {
+  const top = c => new T.Vector3(c.x, terrain.height(c.x, c.z) + 1.3, c.z);
+  const g = new T.Group(), f = top(first);
+  bolt(new T.Vector3(f.x - 1.5, f.y + 9, f.z + 1), f, g);
+  let prev = first;
+  for (const c of rest) { bolt(top(prev), top(c), g); prev = c; }
+  addFx(g, 0.4, (fxo, k) => { boltMat.opacity = 1 - k; g.visible = Math.random() > 0.15 || k > 0.5; });
+  engine.pulse(first.x, f.y - 1.3, first.z, 3, 0.6, 0xfff3b0);
+  engine.shake(0.12);
+  engine.noise({ f0: 4000, f1: 300, dur: 0.35, vol: 0.12, type: 'highpass' });
+  engine.tone({ f0: 70, f1: 40, dur: 1.2, vol: 0.18, type: 'triangle', delay: 0.05 });
+}
+
+// Grace: a soft ring of flowers that mends and lulls, then fades.
+const graceMat = new T.MeshBasicMaterial({ color: 0xffc4dc, transparent: true, opacity: 0.0, depthWrite: false });
+function grace(g) {
+  const y = terrain.height(g.x, g.z);
+  const disc = new T.Mesh(new T.CircleGeometry(g.radius, 40).rotateX(-PI / 2), graceMat.clone());
+  disc.position.set(g.x, y + 0.04, g.z);
+  disc.renderOrder = 1;
+  addFx(disc, 7, (f, k) => {
+    disc.material.opacity = 0.32 * Math.min(1, f.age * 3) * (1 - Math.max(0, (k - 0.8) / 0.2));
+    if (Math.random() < 0.08) engine.bloomRing(g.x, g.z, 0.3, g.radius, 1, 6);
+  });
+  engine.bloomRing(g.x, g.z, 0.3, g.radius, 16, 6);
+  engine.pulse(g.x, y, g.z, g.radius + 0.5, 1.4, 0xffc4dc);
+  [72, 76, 79, 84].forEach((n, i) => engine.pluck(n, { vol: 0.07, dur: 2, delay: i * 0.09 }));
+}
+
+// Marks on a struck figure: flames, frost, ice, stars, steam, petals.
+const glow = new T.MeshBasicMaterial({ vertexColors: true });
+const iceMat = new T.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.78 });
+const veil = new T.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false });
+function markSet() {
+  const flame = new T.Mesh((() => { const g = new Geo();
+    g.add(TP.cone8, M(0, 1.15, 0, 0.55, 0.9, 0.55), hex(0xff5a1f), hex(0xffe36a));
+    g.add(TP.cone8, M(0.14, 1.2, 0.08, 0.3, 0.6, 0.3, 1), hex(0xff8a2a), hex(0xfff2a0)); return g.build(); })(), glow);
+  const chill = new T.Mesh((() => { const g = new Geo(); g.add(TP.cyl12, M(0, 0.02, 0, 1.25, 0.06, 1.25), hex(0xcfe8ff)); return g.build(); })(), iceMat);
+  const ice = new T.Mesh((() => { const g = new Geo();
+    for (let i = 0; i < 7; i++) { const a = i / 7 * TAU;
+      g.add(TP.octa, M(Math.cos(a) * 0.32, 0.9 + (i % 3) * 0.3, Math.sin(a) * 0.32, 0.45, 1.6 + (i % 2) * 0.5, 0.45, a, 0.15, (i % 2 ? 0.2 : -0.2)), hex(0xa8d8ff), hex(0xffffff)); }
+    return g.build(); })(), iceMat);
+  const stars = new T.Group();
+  for (let i = 0; i < 3; i++) { const s = new T.Mesh((() => { const g = new Geo(); g.add(TP.octa, M(0, 0, 0, 0.16), hex(0xffe27a)); return g.build(); })(), glow); s.userData.a = i / 3 * TAU; stars.add(s); }
+  stars.position.y = 2.05;
+  const steam = new T.Mesh((() => { const g = new Geo();
+    for (let i = 0; i < 4; i++) g.add(TP.ico1, M((i - 1.5) * 0.3, 1.5 + (i % 2) * 0.3, (i % 2 - 0.5) * 0.3, 0.6), hex(0xffffff)); return g.build(); })(), veil);
+  const petals = new T.Group();
+  for (let i = 0; i < 3; i++) { const s = new T.Mesh((() => { const g = new Geo(); g.add(TP.octa, M(0, 0, 0, 0.22, 0.05, 0.14), hex(0xffa8c8)); return g.build(); })(), glow); s.userData.a = i / 3 * TAU; petals.add(s); }
+  petals.position.y = 2.0;
+  return { flame, chill, ice, stars, steam, petals };
+}
+const marks = new Map();       // character -> its mark meshes
+function drawMarks(dt, time) {
+  for (const [c, f] of figures) {
+    let m = marks.get(c);
+    if (!m) { m = markSet(); for (const o of Object.values(m)) { o.visible = false; f.mesh.add(o); } marks.set(c, m); }
+    const on = (o, yes) => { o.visible = yes && c.alive; };
+    on(m.flame, c.has(Burning)); on(m.chill, c.has(Chilled)); on(m.ice, c.has(Frozen));
+    on(m.stars, c.has(Stunned)); on(m.steam, c.has(Blinded)); on(m.petals, c.has(Lulled));
+    if (m.flame.visible) { m.flame.scale.set(1, 0.8 + 0.3 * Math.sin(time * 19 + c.x), 1); if (Math.random() < dt * 6) engine.burst(c.x, terrain.height(c.x, c.z) + 1.9, c.z, 1, 0.6); }
+    for (const g of [m.stars, m.petals]) if (g.visible) g.children.forEach(s => {
+      const a = s.userData.a + time * (g === m.stars ? 5 : 1.4);
+      s.position.set(Math.cos(a) * 0.45, Math.sin(time * 3 + s.userData.a) * 0.06, Math.sin(a) * 0.45);
+      s.rotation.y = a;
+    });
+  }
+  for (const c of [...marks.keys()]) if (!figures.has(c)) marks.delete(c);
+}
