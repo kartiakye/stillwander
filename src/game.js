@@ -7,6 +7,8 @@ import { Target } from './core/target.js';
 import { Wind, Hawk, LAND_BLESSINGS } from './core/blessing.js';
 import { Burning, Chilled, Frozen, Stunned, Blinded, Lulled } from './core/effects.js';
 import { Inventory } from './core/inventory.js';
+import { toggleMap, mapOpen } from './mapview.js';
+import * as MAP from './map.js';
 
 const { T, scene, P, player, worldMat, Geo, TP, M, hex, colours } = engine;
 const { VERM, cream, gold, dark, white, WOOD } = colours;
@@ -14,7 +16,8 @@ const PI = Math.PI, TAU = PI * 2;
 const STRAW = 2;                 // the engine's material slot for straw
 const SLOW = 0.55;               // the world's pace while a steered arrow flies
 const RESPAWN = 10;              // seconds before a fallen target stands again
-const SAVE_KEY = 'stillwander-bow2-kit';
+const SAVE_KEY = 'stillwander-bow3-kit';
+document.getElementById('bmap').onclick = () => toggleMap();
 const TINT = { wind: hex(0xbfefff), fire: hex(0xffa060), thunder: hex(0xfff08a), frost: hex(0xd8ecff),
   split: hex(0xa8e890), hawk: hex(0xff6a4a), bloom: hex(0xffb0c8) };
 // What each shrine says as it blesses the bow.
@@ -159,6 +162,8 @@ hooks.key = k => {
   else if (k === 'f') gather();
   else if (k === 't') cycle();
   else if (k === 'shift') sidestep();
+  else if (k === 'n') toggleMap();
+  else if (k === 'escape' && mapOpen()) toggleMap(false);
 };
 
 function craft() {
@@ -216,6 +221,8 @@ hooks.chime = () => { if (archer.bow.blessings.length) { archer.bow.recharge(1);
 hooks.begin = () => {
   load();
   placeTargets();
+  const yard = MAP.LANDMARKS.find(l => l.kind === 'yard');
+  placeTargets(yard.x, yard.z, [4, 5.5, 4.5, 6, 5]);
   hudKit();
 };
 
