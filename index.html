@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="A relaxing open-world wander through seven feudal-Japan-inspired lands.">
+<meta name="description" content="A wander and a sword through seven feudal-Japan-inspired lands.">
 <style>html,body{margin:0}[hidden]{display:none!important}</style>
 <title>Stillwander</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300;1,400&family=Jost:wght@300;400&display=swap">
@@ -28,6 +28,21 @@ body{background:var(--mist);color:var(--paper);font-family:var(--ui);overflow:hi
 #glyphs{display:flex;gap:7px}
 #glyphs i{width:11px;height:11px;transform:rotate(45deg);border:1.2px solid var(--paper);opacity:.55;transition:all 1.2s}
 #glyphs i.on{opacity:1;background:var(--g);border-color:var(--paper);box-shadow:0 0 12px var(--g)}
+#kit{font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;opacity:.9;line-height:1.9;max-width:46ch}
+#vit{display:none;flex-direction:column;gap:7px}
+#vit.on{display:flex}
+#pet{display:flex;gap:7px;padding-left:2px}
+#pet i{width:11px;height:11px;border-radius:0 62% 0 62%;background:var(--rose);border:1.2px solid var(--paper);transition:background .4s,opacity .4s}
+#pet i.off{background:transparent;opacity:.45}
+#stam{width:96px;height:3px;border-radius:2px;background:rgba(251,243,228,.28)}
+#stam i{display:block;height:100%;width:100%;border-radius:2px;background:var(--glow)}
+#boss{position:absolute;left:0;right:0;top:calc(22% + env(safe-area-inset-top,0px));text-align:center;opacity:0;transition:opacity 1s;text-shadow:0 1px 10px var(--veil)}
+#boss.on{opacity:1}
+#boss small{display:block;font-size:.62rem;letter-spacing:.3em;text-transform:uppercase;margin-bottom:.6em}
+#boss div{margin:0 auto;width:min(46vw,300px);height:3px;border-radius:2px;background:rgba(251,243,228,.28)}
+#boss i{display:block;height:100%;width:100%;border-radius:2px;background:var(--rose);transition:width .3s}
+#vig{transition:box-shadow .3s}
+#vig.hurt{box-shadow:inset 0 0 150px 30px rgba(226,72,58,.5)}
 #res{display:flex;gap:14px;font-family:var(--display);font-size:1.25rem;font-weight:500;line-height:1}
 #res span{display:none;transition:transform .22s}
 #res span.on{display:inline-block}
@@ -70,17 +85,22 @@ body{background:var(--mist);color:var(--paper);font-family:var(--ui);overflow:hi
   <div class="row">
     <div id="hud">
       <div id="motes">✦ <span id="mc">0</span><small>light</small></div>
+      <div id="vit" aria-label="Health and stamina"><div id="pet"></div><div id="stam"><i></i></div></div>
       <div id="glyphs" aria-label="Shrines awakened"></div>
+      <div id="kit" aria-label="Stance, arrows, blessing and resolve"></div>
       <div id="res" aria-label="Gathered materials"><span><b>0</b><small>wood</small></span><span><b>0</b><small>bamboo</small></span><span><b>0</b><small>straw</small></span></div>
     </div>
     <div id="ctl">
       <button id="bl" title="Turn the world left (Q)" aria-label="Turn the world left">⟲</button>
       <button id="br" title="Turn the world right (E)" aria-label="Turn the world right">⟳</button>
+      <button id="bg" title="Guard (hold R)" aria-label="Guard, hold">◈</button>
+      <button id="bb" title="Build a campfire (B)" aria-label="Build a campfire">△</button>
       <button id="bx" title="Slash with the sword (F)" aria-label="Slash with the sword">╱</button>
       <button id="bs" title="Sound on or off (M)" aria-label="Sound on or off">♪</button>
     </div>
   </div>
   <div id="biome"></div>
+  <div id="boss"><small>The Drillmaster</small><div><i></i></div></div>
   <div id="talk"><small></small><p></p></div>
   <div class="row end"><div id="hint"></div></div>
   <button id="skip" hidden>Skip prologue</button>
@@ -90,7 +110,7 @@ body{background:var(--mist);color:var(--paper);font-family:var(--ui);overflow:hi
   <h1>STILLWANDER</h1>
   <p>Seven quiet lands. Nothing to lose, nowhere you must be.</p>
   <button id="go">Begin</button>
-  <p class="keys">Click or hold to walk · W A S D · F to slash · Space to hum · Q E to turn · scroll to zoom</p>
+  <p class="keys">Click or W A S D to walk · F slash · R guard · G bow · T blessing · H heal · C craft · B campfire · 1 2 stance · Space hum</p>
 </div>
 <div id="fade"><p></p></div>
 <div id="err" hidden>This world needs WebGL, and it could not start here. Try another browser.</div>
@@ -106,7 +126,7 @@ const sstep=(a,b,x)=>{x=clamp((x-a)/(b-a),0,1);return x*x*(3-2*x)};
 const backOut=t=>{const c=1.70158;t-=1;return 1+(c+1)*t*t*t+c*t*t};
 const hex=h=>[(h>>16&255)/255,(h>>8&255)/255,(h&255)/255];
 const mix3=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
-const SEED=7,CH=16,R=2,CELL=60,RS=48,WATER=-0.18;
+const SEED=7,CH=16,R=2,CELL=300,RS=110,WATER=-0.18;
 
 /* ---------- noise ---------- */
 function hash2(x,z,s){let h=Math.imul(x|0,374761393)^Math.imul(z|0,668265263)^Math.imul((s|0)+SEED*131,1442695041);h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return(h>>>0)/4294967296}
@@ -126,13 +146,16 @@ const B=[
  {name:'Blossom Field',top:hex(0xf6d9e2),top2:hex(0xecc3d6),ca:hex(0xbfa3dc),cb:hex(0x756bb8),base:1.4,amp:2.2,bloom:[0xff9ec4,0xffffff,0xe8302a],acc:hex(0xe0483a),glyph:'#ffa9cc',part:0xffc4dc},
 ];
 const S={h:0,b:0,w:new Float32Array(7),site:0},_w=new Float32Array(7);
+// one of each land, laid outward from the start in story order; beyond that the old repeating pattern
+const RING1={'1,0':1,'1,1':2,'0,1':2,'-1,1':4,'-1,0':4,'-1,-1':5,'0,-1':5,'1,-1':1};
+function landOf(ix,iz){const r=Math.max(Math.abs(ix),Math.abs(iz));if(r===0)return 0;if(r===1)return RING1[ix+','+iz];if(r===2)return ix+iz<0||(ix+iz===0&&ix<0)?3:6;return(((ix+3*iz)%7)+7)%7}
 function weights(x,z,w){
-  const wx=x+(fbm(x/42,z/42,11,2)-.5)*40,wz=z+(fbm(x/42,z/42,23,2)-.5)*40;
+  const wx=x+(fbm(x/90,z/90,11,2)-.5)*56,wz=z+(fbm(x/90,z/90,23,2)-.5)*56;
   const gx=wx/CELL+.5,gz=wz/CELL+.5,cx=Math.floor(gx),cz=Math.floor(gz);let sum=0;w.fill(0);
   for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++){const ix=cx+dx,iz=cz+dz;
-    const px=ix+.5+(hash2(ix,iz,5)-.5)*.6,pz=iz+.5+(hash2(ix,iz,6)-.5)*.6;
+    const jt=ix||iz?.5:0,px=ix+.5+(hash2(ix,iz,5)-.5)*jt,pz=iz+.5+(hash2(ix,iz,6)-.5)*jt;
     let k=1-((gx-px)*(gx-px)+(gz-pz)*(gz-pz))/1.33;if(k<=0)continue;k=k*k*k;k*=k;
-    w[(((ix+3*iz)%7)+7)%7]+=k;sum+=k}
+    w[landOf(ix,iz)]+=k;sum+=k}
   if(sum<=0){w[0]=1;return}for(let i=0;i<7;i++)w[i]/=sum}
 function rawH(x,z,w){
   const n=fbm(x/36,z/36,1,4),n2=fbm(x/11,z/11,2,2);let base=0,amp=0;
@@ -145,21 +168,29 @@ function rawH(x,z,w){
 const dom=w=>{let b=0,m=0;for(let i=0;i<7;i++)if(w[i]>m){m=w[i];b=i}return b};
 const sites=new Map();
 function siteAt(rx,rz){const key=rx+','+rz;let s=sites.get(key);if(s)return s;
-  const x=rx*RS+20+Math.floor(hash2(rx,rz,41)*8),z=rz*RS+20+Math.floor(hash2(rx,rz,42)*8);
+  const o=rx||rz,x=rx*RS+(o?34+Math.floor(hash2(rx,rz,41)*42):40),z=rz*RS+(o?34+Math.floor(hash2(rx,rz,42)*42):32);
   weights(x,z,_w);s={x,z,key,h:Math.max(1,Math.round(rawH(x,z,_w)*2)/2),b:dom(_w)};sites.set(key,s);return s}
 // the mountain dojo: the flattest snowy spot east of the start that is clear of shrines
-const MH=12,PM=(()=>{let best=null,bs=-1;for(let x=120;x<=240;x+=4)for(let z=-52;z<=52;z+=4){let sd=1e9;const rx=Math.floor(x/RS),rz=Math.floor(z/RS);
+const MH=12,PM=(()=>{let best=null,bs=-1;for(let x=-760;x<=-450;x+=8)for(let z=-760;z<=-450;z+=8){let sd=1e9;const rx=Math.floor(x/RS),rz=Math.floor(z/RS);
   for(let b=-1;b<=1;b++)for(let a=-1;a<=1;a++){const s=siteAt(rx+a,rz+b);sd=Math.min(sd,Math.hypot(s.x-x,s.z-z))}
-  if(sd<21)continue;weights(x,z,_w);const sc=_w[3]+Math.min(sd,30)/60;if(sc>bs){bs=sc;best={x,z}}}return best||{x:180,z:0}})();
+  if(sd<21)continue;weights(x,z,_w);const sc=_w[3]+Math.min(sd,30)/60;if(sc>bs){bs=sc;best={x,z}}}return best||{x:-600,z:-600}})();
+// the drill yard on the plain, where the first guardian waits
+const DY=(()=>{let best=null,bs=-1;for(let x=-52;x<=-25;x+=3)for(let z=-52;z<=-25;z+=3){let sd=1e9;for(let b=-1;b<=1;b++)for(let a=-1;a<=1;a++){const s=siteAt(Math.floor(x/RS)+a,Math.floor(z/RS)+b);sd=Math.min(sd,Math.hypot(s.x-x,s.z-z))}
+  if(sd>bs){bs=sd;best={x,z}}}weights(best.x,best.z,_w);best.h=Math.max(1,Math.round(rawH(best.x,best.z,_w)*2)/2);return best})();
+// the archer's ring in the Golden Wood, where the second guardian waits
+const GY=(()=>{let best=null,bs=-1;for(let x=255;x<=345;x+=5)for(let z=-45;z<=45;z+=5){let sd=1e9;for(let b=-1;b<=1;b++)for(let a=-1;a<=1;a++){const s=siteAt(Math.floor(x/RS)+a,Math.floor(z/RS)+b);sd=Math.min(sd,Math.hypot(s.x-x,s.z-z))}
+  if(sd>bs){bs=sd;best={x,z}}}weights(best.x,best.z,_w);best.h=Math.max(1,Math.round(rawH(best.x,best.z,_w)*2)/2);return best})();
+const YARDS=[[PM,[[0,-9,0],[0,7,1],[-5,-5,2],[5,-5,2],[-5,5,2],[5,5,2]]],[DY,[[0,7,1],[-5,-5,2],[5,-5,2],[-5,5,2],[5,5,2]]],[GY,[[0,7,1],[-5,-5,2],[5,-5,2],[-5,5,2],[5,5,2]]]];
 function sample(x,z){
   const st=siteAt(Math.floor(x/RS),Math.floor(z/RS));
   weights(x,z,S.w);let h=rawH(x,z,S.w);S.site=0;
   const d0=Math.hypot(x+.5,z+.5);if(d0<14)h=lerp(1.5,h,sstep(4,14,d0));
   const dm=Math.hypot(x-PM.x,z-PM.z);S.pm=0;if(dm<19){h=dm<11?MH:Math.max(h,MH-(dm-11)*1.1);if(dm<10.5)S.site=3;S.pm=1-sstep(9,19,dm)}
+  for(const Y of[DY,GY]){const dy=Math.hypot(x-Y.x,z-Y.z);if(dy<13){h=lerp(Y.h,h,sstep(8,13,dy));if(dy<7.5)S.site=4}}
   const ds=Math.hypot(x-st.x,z-st.z);
   if(ds<9){h=lerp(st.h,h,sstep(4.2,9,ds));if(ds<3.6)S.site=1;if(ds<2.4){h=st.h+.5;S.site=2}}
   h=Math.round(h*2)/2;if(h<-2.5)h=-2.5;S.h=h;S.b=dom(S.w);S.st=st}
-const DJ1=hex(0xece6f0),DJ2=hex(0xdcd4e4),DJ3=hex(0xd98a80),DJ4=hex(0x6c86c9),SNOW=[.96,.97,1];
+const DJ1=hex(0xece6f0),DJ2=hex(0xdcd4e4),DJ3=hex(0xd98a80),DJ4=hex(0x6c86c9),DJ5=hex(0x5f5580),SNOW=[.96,.97,1];
 const cream=hex(0xfbf3e4),cream2=hex(0xf1dfc8),gold=hex(0xf6c453),dark=hex(0x4a3a6a),trunk=hex(0x8b5d5a),white=[1,1,1];
 function tileCols(x,z,Ct,Ca,Cb,o){
   const w=S.w,v=fbm(x/7,z/7,31,2);let t=[0,0,0],a=[0,0,0],b=[0,0,0];
@@ -169,6 +200,7 @@ function tileCols(x,z,Ct,Ca,Cb,o){
   if(S.h<0)t=mix3(t,[.42,.80,.80],clamp(-S.h/2.5,0,1)*.75+.1);
   if(S.pm>0&&S.site!==3)t=mix3(t,SNOW,S.pm*.8);
   if(S.site===3){t=Math.round(Math.hypot(x-PM.x,z-PM.z))===6?DJ3:((x+z)&1?DJ1:DJ2);a=cream2;b=DJ4}
+  else if(S.site===4){t=Math.round(Math.min(Math.hypot(x-DY.x,z-DY.z),Math.hypot(x-GY.x,z-GY.z)))===6?DJ5:mix3(t,cream,(x+z)&1?.5:.32)}
   else if(S.site){const ac=B[S.st.b].acc;t=S.site===2?((x+z)&1?cream:mix3(cream,ac,.22)):mix3(t,cream,.55);a=cream2;b=mix3(cream2,ac,.8)}
   else if((x+z)&1)t=[t[0]*.972,t[1]*.972,t[2]*.972];
   for(let c=0;c<3;c++){Ct[o+c]=t[c];Ca[o+c]=a[c];Cb[o+c]=b[c]}}
@@ -218,7 +250,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
 const scene=new T.Scene();
 const U={uSkyT:{value:new T.Color()},uSkyB:{value:new T.Color()},uSunCol:{value:new T.Color()},uRes:{value:new T.Vector2(1,1)},
-  uSunPos:{value:new T.Vector2(.84,.82)},uTime:{value:0},uNight:{value:0},uAurora:{value:0},uCenter:{value:new T.Vector3()},uFade:{value:new T.Vector2(12,20)}};
+  uSunPos:{value:new T.Vector2(.84,.82)},uTime:{value:0},uNight:{value:0},uAurora:{value:0},uCenter:{value:new T.Vector3()},uFade:{value:new T.Vector2(12,20)},uVeil:{value:1e5},uVeilC:{value:new T.Vector2()}};
 const SKY=`
 uniform vec3 uSkyT,uSkyB,uSunCol;uniform vec2 uRes,uSunPos;uniform float uTime,uNight,uAurora;
 float skh(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
@@ -243,8 +275,10 @@ function patch(mat){mat.onBeforeCompile=sh=>{Object.assign(sh.uniforms,U);
   wp4=instanceMatrix*wp4;
   #endif
   vWPos=(modelMatrix*wp4).xyz;`);
-  sh.fragmentShader='varying vec3 vWPos;\nuniform vec3 uCenter;uniform vec2 uFade;\n'+SKY+sh.fragmentShader.replace('#include <fog_fragment>',
-   `float fd=smoothstep(uFade.x,uFade.y,length(vWPos.xz-uCenter.xz));
+  sh.fragmentShader='varying vec3 vWPos;\nuniform vec3 uCenter;uniform vec2 uFade;uniform float uVeil;uniform vec2 uVeilC;\n'+SKY+sh.fragmentShader.replace('#include <fog_fragment>',
+   `float vl=smoothstep(uVeil-12.0,uVeil+3.0,length(vWPos.xz-uVeilC));
+    if(vl>0.001){float gy=dot(gl_FragColor.rgb,vec3(0.3,0.5,0.2));gl_FragColor.rgb=mix(gl_FragColor.rgb,mix(vec3(gy),vec3(0.62,0.62,0.69),0.6),vl*0.92);}
+    float fd=smoothstep(uFade.x,uFade.y,length(vWPos.xz-uCenter.xz));
     if(fd>0.001)gl_FragColor.rgb=mix(gl_FragColor.rgb,skyColor(gl_FragCoord.xy),fd);`)};return mat}
 const sky=new T.Mesh(new T.PlaneGeometry(2,2),new T.ShaderMaterial({uniforms:U,depthTest:false,depthWrite:false,
   vertexShader:'void main(){gl_Position=vec4(position.xy,1.0,1.0);}',
@@ -426,7 +460,7 @@ function genChunk(cx,cz){
       blk(site.x-x0+1+dx,site.z-z0+1+dz)}
     g.add(TP.box,M(sx,site.h+.5,sz,1.15,.6,1.15),acc,mix3(acc,cream,.5));blk(site.x-x0+1,site.z-z0+1);addSanctum(ch,site)}
   // mountain dojo: hall, gate, lanterns
-  for(const[dx,dz,kind]of[[0,-9,0],[0,7,1],[-5,-5,2],[5,-5,2],[-5,5,2],[5,5,2]]){const x=PM.x+dx,z=PM.z+dz,i=x-x0+1,j=z-z0+1;if(i<1||j<1||i>CH||j>CH)continue;const h=Hh[i+j*N];
+  for(const[Y,L]of YARDS)for(const[dx,dz,kind]of L){const x=Y.x+dx,z=Y.z+dz,i=x-x0+1,j=z-z0+1;if(i<1||j<1||i>CH||j>CH)continue;const h=Hh[i+j*N];
     if(kind===0){Pr.shrine(g,x+.5,h,z+.5,()=>0);for(let b=-1;b<=1;b++)for(let a=-1;a<=1;a++)blk(i+a,j+b)}
     else if(kind===1){Pr.torii(g,x+.5,h,z+.5,()=>0);blk(i-1,j);blk(i+1,j)}else{Pr.toro(g,x+.5,h,z+.5);blk(i,j)}}
   // scatter
@@ -436,15 +470,15 @@ function genChunk(cx,cz){
     if(h<0){if(b===4||b===0||b===6){if(p<.11)Pr.lily(g,X,Z,r)}else if(b===3){if(p<.07)g.add(TP.cyl6,M(X,WATER-.1,Z,.8+r()*.5,.22,.8+r()*.5,r()*3),ICE2)}else if(p<.05)Pr.lily(g,X,Z,r);
       if(h===-.5&&p>.93)Pr.reed(g,X,h,Z,r);continue}
     const flat=Hh[k+1]===h&&Hh[k-1]===h&&Hh[k+N]===h&&Hh[k-N]===h;
-  const ct=(kind,solid,fn)=>cutp(kind,solid,i,j,x,z,h,fn);
+  const ct=(kind,solid,fn)=>cutp(kind,solid,i,j,x,z,h,fn),tf=sstep(.5,.63,fbm(x/38,z/38,57,2))*1.9+.04;
   switch(b){
-    case 0:if(p<.018)ct(0,1,()=>Pr.matsu(g,X,h,Z,r));else if(p<.42)ct(2,0,()=>Pr.pampas(g,X,h,Z,r));else if(p<.5)ct(2,0,()=>Pr.grass(g,X,h,Z,r,hex(0xa9b87a),hex(0xe6dca0)));else if(p<.51){Pr.rock(g,X,h,Z,r,STONE,.9);blk(i,j)}else if(p<.56)Pr.flower(g,X,h,Z,r,bi.bloom);break;
-    case 1:if(p<.12)ct(0,1,()=>Pr.roundTree(g,X,h,Z,r,hex(0xe39a1c),hex(0xffe270)));else if(p<.34)Pr.leaves(g,X,h,Z,r,hex(0xffd84a),hex(0xf2a030));else if(p<.36){Pr.rock(g,X,h,Z,r,STONE,1);blk(i,j)}else if(p<.375&&flat){Pr.toro(g,X,h,Z);blk(i,j)}else if(p<.42)Pr.flower(g,X,h,Z,r,bi.bloom);break;
-    case 2:if(p<.2)ct(1,1,()=>Pr.bamboo(g,X,h,Z,r));else if(p<.3)ct(1,0,()=>Pr.bamboo(g,X,h,Z,r,1));else if(p<.4)ct(2,0,()=>Pr.grass(g,X,h,Z,r,hex(0x3f8a5a),hex(0xa8e08a)));else if(p<.415){Pr.rock(g,X,h,Z,r,hex(0x7fa08a),1);blk(i,j)}else if(p<.43&&flat){Pr.toro(g,X,h,Z);blk(i,j)}else if(p<.46)Pr.flower(g,X,h,Z,r,bi.bloom);break;
-    case 3:if(p<.05)ct(0,1,()=>Pr.pine(g,X,h,Z,r,hex(0x4f8fa8),hex(0xb8e0ee),ICE2));else if(p<.085){Pr.ice(g,X,h,Z,r);blk(i,j)}else if(p<.11){Pr.rock(g,X,h,Z,r,ICE2,1.1);blk(i,j)}else if(p<.125&&flat){Pr.toro(g,X,h,Z);blk(i,j)}break;
-    case 4:if(p<.07)ct(0,1,()=>Pr.matsu(g,X,h,Z,r));else if(p<.2)ct(2,0,()=>Pr.reed(g,X,h,Z,r));else if(p<.22){Pr.rock(g,X,h,Z,r,STONE,.9);blk(i,j)}else if(p<.32)Pr.flower(g,X,h,Z,r,bi.bloom);break;
-    case 5:if(p<.1)ct(0,1,()=>Pr.roundTree(g,X,h,Z,r,hex(0xb8242c),hex(0xff8a4a)));else if(p<.3)Pr.leaves(g,X,h,Z,r,hex(0xe8402e),hex(0xffa050));else if(p<.32){Pr.rock(g,X,h,Z,r,hex(0x8a5a6a),1);blk(i,j)}else if(p<.37)ct(2,0,()=>Pr.grass(g,X,h,Z,r,hex(0xa8405a),hex(0xf6a070)));else if(p<.4)Pr.flower(g,X,h,Z,r,bi.bloom);break;
-    case 6:if(p<.07)ct(0,1,()=>Pr.roundTree(g,X,h,Z,r,PK1,PK2));else if(p<.085&&flat){Pr.toro(g,X,h,Z);blk(i,j)}else if(p<.27)Pr.flower(g,X,h,Z,r,bi.bloom);else if(p<.33)Pr.leaves(g,X,h,Z,r,PK2,PK1);else if(p<.37)ct(2,0,()=>Pr.grass(g,X,h,Z,r,hex(0xc9a0d8),PK2));break}}
+    case 0:if(p<.06*tf)ct(0,1,()=>Pr.matsu(g,X,h,Z,r));else if(p<.3)ct(2,0,()=>Pr.pampas(g,X,h,Z,r));else if(p<.5)ct(2,0,()=>Pr.grass(g,X,h,Z,r,hex(0xa9b87a),hex(0xe6dca0)));else if(p<.51){Pr.rock(g,X,h,Z,r,STONE,.9);blk(i,j)}else if(p<.56)Pr.flower(g,X,h,Z,r,bi.bloom);break;
+    case 1:if(p<.12*tf)ct(0,1,()=>Pr.roundTree(g,X,h,Z,r,hex(0xe39a1c),hex(0xffe270)));else if(p<.34)Pr.leaves(g,X,h,Z,r,hex(0xffd84a),hex(0xf2a030));else if(p<.36){Pr.rock(g,X,h,Z,r,STONE,1);blk(i,j)}else if(p<.375&&flat){Pr.toro(g,X,h,Z);blk(i,j)}else if(p<.42)Pr.flower(g,X,h,Z,r,bi.bloom);break;
+    case 2:if(p<.2*tf)ct(1,1,()=>Pr.bamboo(g,X,h,Z,r));else if(p<.3)ct(1,0,()=>Pr.bamboo(g,X,h,Z,r,1));else if(p<.4)ct(2,0,()=>Pr.grass(g,X,h,Z,r,hex(0x3f8a5a),hex(0xa8e08a)));else if(p<.415){Pr.rock(g,X,h,Z,r,hex(0x7fa08a),1);blk(i,j)}else if(p<.43&&flat){Pr.toro(g,X,h,Z);blk(i,j)}else if(p<.46)Pr.flower(g,X,h,Z,r,bi.bloom);break;
+    case 3:if(p<.05*tf)ct(0,1,()=>Pr.pine(g,X,h,Z,r,hex(0x4f8fa8),hex(0xb8e0ee),ICE2));else if(p<.085){Pr.ice(g,X,h,Z,r);blk(i,j)}else if(p<.11){Pr.rock(g,X,h,Z,r,ICE2,1.1);blk(i,j)}else if(p<.125&&flat){Pr.toro(g,X,h,Z);blk(i,j)}break;
+    case 4:if(p<.07*tf)ct(0,1,()=>Pr.matsu(g,X,h,Z,r));else if(p<.2)ct(2,0,()=>Pr.reed(g,X,h,Z,r));else if(p<.22){Pr.rock(g,X,h,Z,r,STONE,.9);blk(i,j)}else if(p<.32)Pr.flower(g,X,h,Z,r,bi.bloom);break;
+    case 5:if(p<.1*tf)ct(0,1,()=>Pr.roundTree(g,X,h,Z,r,hex(0xb8242c),hex(0xff8a4a)));else if(p<.3)Pr.leaves(g,X,h,Z,r,hex(0xe8402e),hex(0xffa050));else if(p<.32){Pr.rock(g,X,h,Z,r,hex(0x8a5a6a),1);blk(i,j)}else if(p<.37)ct(2,0,()=>Pr.grass(g,X,h,Z,r,hex(0xa8405a),hex(0xf6a070)));else if(p<.4)Pr.flower(g,X,h,Z,r,bi.bloom);break;
+    case 6:if(p<.07*tf)ct(0,1,()=>Pr.roundTree(g,X,h,Z,r,PK1,PK2));else if(p<.085&&flat){Pr.toro(g,X,h,Z);blk(i,j)}else if(p<.27)Pr.flower(g,X,h,Z,r,bi.bloom);else if(p<.33)Pr.leaves(g,X,h,Z,r,PK2,PK1);else if(p<.37)ct(2,0,()=>Pr.grass(g,X,h,Z,r,hex(0xc9a0d8),PK2));break}}
 // interactive
   const mr=RNG(hash2(cx,cz,91)*1e9);
   const spot=()=>{const i=1+Math.floor(mr()*CH),j=1+Math.floor(mr()*CH),k=i+j*N;if(Hh[k]<.5||Sf[k]||ch.blk[(i-1)+(j-1)*CH])return null;return{i,j,k,x:x0+i-1,z:z0+j-1,h:Hh[k]}};
@@ -562,7 +596,7 @@ function ringChime(th,delay=0){if(delay>0){th.delay=delay;return}th.v=7;th.cool=
   pluck(60+ins.oct*12+SCALE[th.note],{type:ins.type,dur:ins.dur+.6,vol:.17});pluck(72+ins.oct*12+SCALE[(th.note+2)%5],{dur:1.6,vol:.06,delay:.12});
   pulse(th.x,th.y,th.z,3.2,1.3,0xffffff);burst(th.x,th.y+1.5,th.z,7);bloomRing(th.x,th.z,.7,2.4,6,th.b);
   if(!seen.chime){seen.chime=true;say('Press Space to hum. Everything nearby answers.',7)}}
-function collect(th){collected.add(th.key);dropThing(th);const i=th.ch.things.indexOf(th);if(i>=0)th.ch.things.splice(i,1);P.motes++;hud();
+function collect(th){gainSpirit(1);collected.add(th.key);dropThing(th);const i=th.ch.things.indexOf(th);if(i>=0)th.ch.things.splice(i,1);P.motes++;hud();
   burst(th.x,th.obj.position.y,th.z,9);pluck(72+SCALE[P.motes%5],{vol:.14,dur:1.6});pluck(79+SCALE[P.motes%5],{vol:.09,dur:1.8,delay:.11});
   if(!seen.mote){seen.mote=true;say('Light follows you. Carry three to a sleeping shrine. The wind and the diamond at the edge point the way.',10)}
   else if(P.motes===3)say('You carry enough light to wake a shrine.',6)}
@@ -571,9 +605,9 @@ function awaken(th){th.awake=true;th.t=0;awake.add(th.st.key);P.motes-=3;const f
   pulse(th.x,th.y,th.z,13,3,0xfff3c4);pulse(th.x,th.y,th.z,7,2,0xffffff);burst(th.x,th.y+2,th.z,30,4);bloomRing(th.x,th.z,2.6,10,90,th.st.b);
   showBiome('Shrine of the '+B[th.st.b].name);
   if(awakeBiomes.size===7&&first){say('All seven lands are singing. Wander as long as you like.',14);[0,7,12,16,19,24,28,31].forEach((n,i)=>pluck(48+n,{delay:1.5+i*.22,vol:.13,dur:4}))}
-  else say(first?awakeBiomes.size+' of 7 lands awake':'Another shrine wakes',6);save()}
+  else say(first?awakeBiomes.size+' of 7 lands awake':'Another shrine wakes',6);save();if(!CHP.fat)fatigue();else if(CHP.un&&th.st.b===1&&!C2.doubt)doubt()}
 function hum(){pulse(P.x,P.y,P.z,7.5,1.6,0xfff3c4);pluck(57,{vol:.12,dur:2.2,type:'triangle'});pluck(64,{vol:.09,dur:2.4,delay:.05});
-  for(const th of things){const d=Math.hypot(th.x-P.x,th.z-P.z);if(d>8)continue;if(th.type===1)ringChime(th,.15+d*.11);else if(th.type===0)th.pull=true}
+  for(const th of things){const d=Math.hypot(th.x-P.x,th.z-P.z);if(d>8)continue;if(th.type===1){ringChime(th,.15+d*.11);gainSpirit(1)}else if(th.type===0)th.pull=true}
   bloomRing(P.x,P.z,.6,3,8,curB)}
 function updThings(dt,t){
   for(let i=things.length-1;i>=0;i--){const th=things[i],dx=th.x-P.x,dz=th.z-P.z,d=Math.hypot(dx,dz);
@@ -612,19 +646,20 @@ const arc=new T.Mesh(arcG,arcMat);arc.position.y=.52;arc.frustumCulled=false;arc
 const SW={t:9,dir:-1,hit:true,chain:false,queued:false,aim:null},inv=[0,0,0],live=[],drops=[];let shake=0;
 function eachCut(fn){const cx=Math.floor(P.x)>>4,cz=Math.floor(P.z)>>4;for(let b=-1;b<=1;b++)for(let a=-1;a<=1;a++){const ch=chunks.get((cx+a)+','+(cz+b));if(!ch)continue;for(let i=ch.cuts.length-1;i>=0;i--)fn(ch.cuts[i])}}
 function slash(noAim){if(!started)return;if(SW.t<.24){SW.queued=true;return}
-  SW.chain=SW.t<.4;SW.t=0;SW.hit=false;SW.queued=false;SW.dir=-SW.dir;SW.aim=null;SW.mode=0;
-  if(!noAim){let bd=2.6;for(const f of foes){if(f.st===0||f.st===5)continue;const dx=f.x-P.x,dz=f.z-P.z,d=Math.hypot(dx,dz);if(d<bd){bd=d;SW.aim=Math.atan2(dx,dz)}}bd=Math.min(bd,2.3);eachCut(c=>{if(!c.solid)return;const dx=c.x-P.x,dz=c.z-P.z,d=Math.hypot(dx,dz);if(d<bd&&Math.abs(c.h-P.y)<1.6){bd=d;SW.aim=Math.atan2(dx,dz)}})}
+  SW.chain=SW.t<.4;SW.t=0;SW.hit=false;SW.queued=false;SW.dir=-SW.dir;SW.aim=null;SW.mode=0;SW.heavy=false;
+  if(!noAim){let bd=2.6;for(const f of foes){if(f.st===0||f.st===5)continue;const dx=f.x-P.x,dz=f.z-P.z,d=Math.hypot(dx,dz);if(d<bd){bd=d;SW.aim=Math.atan2(dx,dz)}}for(const h of hol){if((h.st===6||h.st===7))continue;const dx=h.x-P.x,dz=h.z-P.z,d=Math.hypot(dx,dz);if(d<bd){bd=d;SW.aim=Math.atan2(dx,dz)}}bd=Math.min(bd,2.3);eachCut(c=>{if(!c.solid)return;const dx=c.x-P.x,dz=c.z-P.z,d=Math.hypot(dx,dz);if(d<bd&&Math.abs(c.h-P.y)<1.6){bd=d;SW.aim=Math.atan2(dx,dz)}})}
   noise({f0:SW.dir>0?800:1050,f1:3400,dur:.2,vol:.085,q:1.1});if(!SW.chain)tone({f0:2500,f1:3300,dur:.3,vol:.012,rev:1})}
-function updSword(dt){if(SW.t>1)return;SW.t+=dt;const t=SW.t;
+function updSword(dt){if(SW.t>1)return;SW.t+=dt*(SW.heavy?.62:1)*(PL.stance?.8:1);const t=SW.t;
   if(SW.mode===1){const d=sstep(0,.05,t)*(1-sstep(.25,.5,t));qW.setFromEuler(_e.set(-1.0,.55,0,'YXZ'));sword.quaternion.copy(qS).slerp(qW,d);sword.position.lerpVectors(pS,pW,d);pbody.rotation.y=0;arc.visible=false;return}
   if(SW.aim!==null&&t<.14){let da=SW.aim-P.face;da=Math.atan2(Math.sin(da),Math.cos(da));P.face+=da*Math.min(1,dt*22);player.rotation.y=P.face}
   const d=Math.max(sstep(0,.07,t),SW.chain?1:0)*(1-sstep(.4,.66,t)),sw=1-Math.pow(1-clamp((t-.04)/.17,0,1),3),th=SW.dir*lerp(-1.5,1.5,sw);
   qW.setFromEuler(_e.set(-.1,th,SW.dir*.3,'YXZ'));sword.quaternion.copy(qS).slerp(qW,d);sword.position.lerpVectors(pS,pW,d);
   pbody.rotation.y=SW.dir*lerp(-.45,.45,sw)*d;
-  arcMat.uniforms.uH.value=sw;arcMat.uniforms.uA.value=sstep(.04,.07,t)*(1-sstep(.17,.42,t));arc.visible=t>.04&&t<.42;arc.scale.x=SW.dir;
+  arcMat.uniforms.uH.value=sw;arcMat.uniforms.uA.value=sstep(.04,.07,t)*(1-sstep(.17,.42,t));arc.visible=t>.04&&t<.42;const as=SW.heavy?1.4:1;arc.scale.set(SW.dir*as,1,as);
   if(!SW.hit&&t>=.1){SW.hit=true;doHit()}
-  if(SW.queued&&t>=.24)slash()}
-function doHit(){const fx=Math.sin(P.face),fz=Math.cos(P.face);let n=0;hitFoes(fx,fz);
+  if(SW.queued&&t>=.24)slash();
+  else if(t>=.3&&t<.62&&keys.f&&!SW.heavy&&SW.mode!==1&&(!CHP.fat||PL.sta>=30)){SW.t=0;SW.heavy=true;SW.hit=false;SW.dir=-SW.dir;SW.chain=true;if(CHP.fat)spend(30);noise({f0:480,f1:2200,dur:.34,vol:.1,q:1})}}
+function doHit(){const fx=Math.sin(P.face),fz=Math.cos(P.face);let n=0;hitFoes(fx,fz);hitHollows(fx,fz,SW.heavy);if(BLS.armed&&BLS.ch>=1){BLS.armed=false;BLS.ch-=1;blessSlash(fx,fz);hudK()}
   eachCut(c=>{const dx=c.x-P.x,dz=c.z-P.z,d=Math.hypot(dx,dz);if(d>(c.solid?2.15:1.8)||Math.abs(c.h-P.y)>1.6)return;if(d>.55&&(dx*fx+dz*fz)/d<.1)return;strike(c,dx/(d||1),dz/(d||1));n++});
   if(n&&!seen.cut){seen.cut=true;say('Trees take two strokes. What falls gathers to you.',6)}}
 // lift a prop out of its chunk mesh so it can move on its own
@@ -637,7 +672,7 @@ function extract(c){const geo=c.ch.mesh.geometry,a=c.v0*3,b=c.v1*3,pa=geo.attrib
 function strike(c,dx,dz){if(!c.m)extract(c);c.ax.set(dz,0,-dx);
   if(c.solid&&c.kind===0){leafBurst(c.x,c.h+c.top*.75,c.z,8,c.col,1.7);leafBurst(c.x-dx*.3,c.h+.5,c.z-dz*.3,4,trunk,1.1);
     tone({f0:190,f1:92,dur:.17,vol:.22,type:'triangle'});noise({f0:1900,f1:500,dur:.07,vol:.1,type:'lowpass'});
-    if(--c.hp>0){c.wv=10;c.st=1;if(!c.live){c.live=true;live.push(c)}return}
+    if((c.hp-=SW.heavy?2:1)>0){c.wv=10;c.st=1;if(!c.live){c.live=true;live.push(c)}return}
     noise({f0:260,f1:700,dur:.7,vol:.035,att:.35});fell(c,.85)}
   else if(c.solid){leafBurst(c.x,c.h+c.top*.7,c.z,7,c.col,1.5);tone({f0:640,f1:470,dur:.15,vol:.15,rev:1});tone({f0:960,f1:900,dur:.08,vol:.05});noise({f0:5200,f1:2400,dur:.06,vol:.06,type:'highpass'});fell(c,.6)}
   else{leafBurst(c.x,c.h+Math.min(.6,c.top*.6),c.z,5,c.col,1.4);noise({f0:4600,f1:2400,dur:.17,vol:.05,type:'highpass'});if(c.kind===1)tone({f0:760,f1:600,dur:.09,vol:.06,rev:1});fell(c,0)}}
@@ -738,13 +773,195 @@ function proEnd(){PRO.on=false;proDone=true;PRO.q.length=0;PRO.cur=null;$('talk'
   for(const f of foes)scene.remove(f.grp);foes.length=0;if(master){scene.remove(master.grp);master=null}
   P.x=home.x;P.z=home.z;P.face=PI/4;P.target=null;tod=.08;applyTime();updateChunks(true);P.y=effH(Math.floor(P.x),Math.floor(P.z));camT.set(P.x,P.y+.8,P.z);
   for(const s of trail)s.position.set(P.x,P.y+1,P.z);weights(Math.floor(P.x),Math.floor(P.z),_w);curB=dom(_w);pcolT.set(B[curB].part);hud();save();
+  chapterStart();
   fade(0);showBiome(B[curB].name);say('The lands below are quiet. Click, hold, or use W A S D to wander. Gather the motes of light.',10)}
+
+/* ---------- chapter one: fatigue, hollows, fire ---------- */
+const VEIL=120,PL={hp:5,sta:100,rest:0,block:false,bt:9,inv:0,stun:0,g:0,tb:false,dead:false,deadT:0,fireT:0,atFire:false},
+  CHP={fat:false,un:false,seenH:false,seenN:false,veilT:0,spT:3,resp:null},hol=[],fires=[],PAPER=[.93,.9,.85],ROSEP=[.95,.62,.62];
+let bossRef=null,boss2=null,veilK='';
+for(let i=0;i<5;i++)$('pet').appendChild(document.createElement('i'));
+function hudV(){[...$('pet').children].forEach((e,i)=>e.classList.toggle('off',i>=PL.hp));$('vit').classList.toggle('on',CHP.fat)}
+function spend(n){PL.sta=Math.max(0,PL.sta-n);PL.rest=0}
+function updVitals(dt){PL.inv-=dt;PL.stun-=dt;const want=CHP.fat&&(keys.r||PL.tb)&&PL.sta>0&&PL.stun<=0&&!PL.dead&&SW.t>.3;
+  if(want&&!PL.block)PL.bt=0;PL.block=want;if(want){PL.bt+=dt;spend(9*dt);let bd=5.5,ta=null;for(const h of hol){if(!h.agg||(h.st===6||h.st===7))continue;const d=Math.hypot(h.x-P.x,h.z-P.z);if(d<bd){bd=d;ta=Math.atan2(h.x-P.x,h.z-P.z)}}
+    if(ta!==null){let da=ta-P.face;da=Math.atan2(Math.sin(da),Math.cos(da));P.face+=da*Math.min(1,dt*16);player.rotation.y=P.face}}
+  PL.rest+=dt;if(PL.rest>1&&PL.sta<100)PL.sta=Math.min(100,PL.sta+30*dt);
+  PL.g=clamp(PL.g+(PL.block?12:-10)*dt,0,1);if(SW.t>1){qW.setFromEuler(_e.set(-1.0,.55,0,'YXZ'));sword.quaternion.copy(qS).slerp(qW,PL.g);sword.position.lerpVectors(pS,pW,PL.g)}
+  $('stam').firstChild.style.width=PL.sta+'%'}
+// an enemy blow arrives: 2 deflected, 1 blocked, 0 hurt, -1 ignored
+function strikePlayer(h,dmg){if(PL.inv>0)return -1;if(!CHP.fat){parry(h);return 2}
+  const dx=h.x-P.x,dz=h.z-P.z,d=Math.hypot(dx,dz)||1,front=(dx*Math.sin(P.face)+dz*Math.cos(P.face))/d>-.25;
+  if(PL.block&&front){if(PL.bt<.26&&C2.doubt){parry(h);PL.sta=Math.min(100,PL.sta+12);gainRes(.5);gainSpirit(.5);return 2}
+    spend(dmg>1?26:20);burst((P.x+h.x)/2,P.y+.8,(P.z+h.z)/2,4,1.6);shake=.05;tone({f0:880,f1:560,dur:.13,vol:.1,type:'triangle'});noise({f0:3000,f1:1200,dur:.06,vol:.07,type:'highpass'});
+    if(PL.sta<=0){PL.stun=.9;say('Your guard breaks.',3)}return 1}
+  PL.hp=Math.max(0,PL.hp-dmg);PL.inv=.9;shake=.17;P.target=null;const kx=P.x-dx/d*.7,kz=P.z-dz/d*.7;if(!blockedAt(kx,kz)&&Math.abs(effH(Math.floor(kx),Math.floor(kz))-P.y)<.8){P.x=kx;P.z=kz}
+  burst(P.x,P.y+.7,P.z,6,2);leafBurst(P.x,P.y+.7,P.z,4,ROSEP,1.6);tone({f0:150,f1:60,dur:.3,vol:.28});noise({f0:900,f1:200,dur:.18,vol:.12,type:'lowpass'});
+  const v=$('vig');v.classList.add('hurt');setTimeout(()=>v.classList.remove('hurt'),240);hudV();
+  if(PL.hp<=0){PL.dead=true;PL.deadT=0;fade(1,CHP.resp?'You fell.\nThe fire remembers you.':'You fell.\nThe plain gives you back.');pluck(33,{vol:.2,dur:4,type:'triangle'})}return 0}
+function respawn(){PL.dead=false;PL.hp=5;PL.sta=100;PL.stun=0;PL.inv=1.5;for(const h of hol.slice())if(h.kind!==2&&h.kind!==4)rmHollow(h);if(bossRef&&bossRef.agg)bossReset(bossRef);if(boss2&&boss2.agg)bossReset(boss2);for(const a of arrows)scene.remove(a.m);arrows.length=0;
+  const r=CHP.resp||{x:.5,z:.5};P.x=r.x;P.z=r.z;P.target=null;updateChunks(true);P.y=effH(Math.floor(P.x),Math.floor(P.z));camT.set(P.x,P.y+.8,P.z);hudV();fade(0);
+  say(CHP.resp?'You wake beside the embers.':'You wake where you first came down. A campfire would keep you closer.',7)}
+function fatigue(){CHP.fat=true;hudV();talk('','Something returns to you. Your arms are heavy. You are tired, for the first time.');talk('','Your guard no longer answers for you.');
+  say('Hold R to guard; it costs stamina. Hold F for a heavy strike. Fill a foe\'s gold bar to break it, then finish it.',16);save()}
+/* hollows */
+const hswG=(()=>{const g=new Geo();g.add(TP.box,M(0,-.03,.12,.06,.06,.24),dark);g.add(TP.box,M(0,-.035,.66,.05,.07,.84),hex(0x6f7590),hex(0xb9c0d8));return g.build()})();
+function addHollow(kind,x,z){const g=new Geo(),a=hex(0x2a2740),b=hex(0x4d4970);g.add(TP.robe,M(0,0,0),a,b);g.add(TP.cyl12,M(0,.3,0,.56,.09,.56),hex(0x6a2a34));g.add(TP.ico1,M(0,.8,0,.27),hex(0x14121d));g.add(TP.cone8,M(0,.86,0,.66,.3,.66),a,b);
+  if(kind){g.add(TP.box,M(-.3,.5,0,.24,.1,.32),b);g.add(TP.box,M(.3,.5,0,.24,.1,.32),b)}if(kind===2)g.add(TP.cone4,M(0,1.1,0,.2,.45,.2),gold);else g.add(TP.box,M(0,1.0,.2,.3,.05,.04),kind?gold:hex(0x8a86a8));
+  const grp=new T.Group(),body=new T.Mesh(g.build(),worldMat),sw=new T.Mesh(kind>=3?bowG:hswG,worldMat),sc=[1,1.15,1.5,.95,1.35][kind],bar=new T.Sprite(barMat);bar.position.y=1.5;bar.scale.set(.001,.09,1);bar.visible=false;grp.add(bar);body.castShadow=sw.castShadow=true;sw.position.set(.24,.5,.08);grp.add(body,sw);grp.scale.setScalar(sc);scene.add(grp);
+  const h={kind,grp,body,sw,sc,x,z,hx:x,hz:z,face:Math.random()*TAU,hp:[3,4,20,2,22][kind],hm:[3,4,20,2,22][kind],po:0,pm:[3,5,12,2,8][kind],poT:0,brk:false,bar,st:0,t:Math.random()*1.6,cut:0,cd:0,pat:0,iv:.38,kx:0,kz:0,lean:0,swa:.5,walk:0,dir:Math.random()<.5?1:-1,agg:false,phase:0,feint:false};hol.push(h);return h}
+function rmHollow(h){scene.remove(h.grp);h.body.geometry.dispose();const i=hol.indexOf(h);if(i>=0)hol.splice(i,1)}
+function bossReset(h){h.agg=false;h.st=0;h.hp=h.hm;h.po=0;h.brk=false;h.phase=0;h.x=h.hx;h.z=h.hz;h.kx=h.kz=0;$('boss').classList.remove('on')}
+// hollow states: 0 drilling, 1 closing or circling, 2 wind-up, 3 between cuts, 4 pause, 5 staggered, 6 breaking apart, 7 leaving
+function doCut(h,spd){let dx=P.x-h.x,dz=P.z-h.z,d=Math.hypot(dx,dz)||1;const n=h.kind===2?(h.phase>1?6:5):h.kind?1:3;
+  {const s=clamp(d-1.3,0,h.kind===1?2.4:h.kind===2?1.3:.5),ax=h.x+dx/d*s,az=h.z+dz/d*s;if(!blockedAt(ax,az)&&tileH(Math.floor(ax),Math.floor(az))>=0){h.x=ax;h.z=az;d-=s}}
+  noise({f0:700,f1:2400,dur:.14,vol:.05,q:1});let res=-1;if(d<(h.kind===2?2.7:2.1)&&!PL.dead)res=strikePlayer(h,h.kind===2?2:1);
+  h.cut++;if(res===2)addPo(h,3);if(h.brk)return;if(res===2&&(h.kind!==2||h.cut>=n)){h.st=5;h.t=h.kind===2?2.4:1.3;h.kx=-dx/d*4;h.kz=-dz/d*4;return}
+  if(h.cut>=n){h.st=4;h.t=h.kind===2?1.5:1.15}else{h.st=3;h.iv=h.t=(h.kind===2?[.55,.42,.32][h.phase]:.38)/spd}}
+function updHollows(dt){const night=U.uNight.value>.5,spd=night?1.25:1,maxAtt=night?2:1;let att=0,nearFire=false;for(const h of hol)if(h.st===2||h.st===3)att++;
+  for(const f of fires)if(Math.hypot(f.x-P.x,f.z-P.z)<4.5)nearFire=true;
+  for(let i=hol.length-1;i>=0;i--){const h=hol[i],dx=P.x-h.x,dz=P.z-h.z,d=Math.hypot(dx,dz)||1;let swT=.5,lean=0,mx=0,mz=0,sp=0;
+    if(h.st===6){h.t+=dt;h.grp.scale.setScalar(Math.max(.001,1-h.t/.45)*h.sc);h.grp.position.y+=dt*1.2;if(h.t>=.45)rmHollow(h);continue}
+    if(h.kind<2||h.kind===3){if(d>34){rmHollow(h);continue}if(nearFire&&h.agg&&h.st!==7){h.st=7;h.agg=false}}
+    else if(h.kind===2){const yd=Math.hypot(P.x-DY.x-.5,P.z-DY.z-.5);
+      if(!h.agg&&CHP.fat&&yd<6.3&&!PL.dead){duelClear();h.agg=true;h.st=1;h.cd=1.2;$('boss').classList.add('on');say('The Drillmaster turns. Its drill never changes. Learn it.',7);pluck(33,{vol:.2,dur:5,type:'triangle'})}
+      else if(h.agg&&yd>13)bossReset(h)}
+    if(h.agg&&h.st<5){let da=Math.atan2(dx,dz)-h.face;da=Math.atan2(Math.sin(da),Math.cos(da));h.face+=da*Math.min(1,dt*(h.st>=2?5:9))}
+    switch(h.st){
+      case 0:h.t-=dt;swT=h.t<.3?1:h.t<.8?-1.9:.5;if(h.t<=0)h.t=1.7+Math.random()*.5;
+        if(h.kind!==2&&h.kind!==4&&d<(h.kind===3?13:6.5)&&!PL.dead&&!nearFire){h.agg=true;h.st=h.kind===3?8:1;h.cd=.5;if(!CHP.seenH){CHP.seenH=true;say(CHP.fat?'Hollows. Empty armour, still drilling.':'Hollows. Empty armour, still drilling. Your guard still answers for you.',7)}}break;
+      case 1:{h.cd-=dt;const can=att<maxAtt&&h.cd<=0&&!PL.dead;let tr=can?1.25:3;
+        if(h.kind===1){tr=2.4;h.pat+=dt;swT=-.9;if(can&&d<3.4&&(PL.sta<40||h.pat>3.2)){h.st=2;h.t=.7/spd;h.cut=0;h.pat=0;att++}}
+        else if(can&&d<1.6){att++;h.cut=0;h.st=2;if(h.kind===0&&!h.feint&&Math.random()<.22){h.feint=true;h.t=.32;h.cut=-1}else{h.feint=false;h.t=(h.kind===2?.7:.5)/spd}}
+        const rad=clamp(d-tr,-1,1);mx=dx/d*rad;mz=dz/d*rad;if(!can||h.kind===1){mx+=-dz/d*.55*h.dir;mz+=dx/d*.55*h.dir}sp=(h.kind===1?2:2.5)*spd;break}
+      case 2:h.t-=dt;swT=-1.9;lean=-.12;if(h.t<=0){if(h.cut<0){h.st=1;h.cd=.2}else doCut(h,spd)}break;
+      case 3:h.t-=dt;swT=h.t>h.iv*.45?1:-1.7;lean=.15;if(h.t<=0)doCut(h,spd);break;
+      case 4:h.t-=dt;swT=.9;lean=.25;if(h.t<=0){h.st=1;h.cd=.5+Math.random()*.9}break;
+      case 5:h.t-=dt;swT=-.5;lean=-.35*Math.min(1,h.t*2);if(h.t<=0){h.st=h.kind>=3?8:1;h.cd=.35;if(h.brk){h.brk=false;h.po=0}}break;
+      case 8:{let da=Math.atan2(dx,dz)-h.face;da=Math.atan2(Math.sin(da),Math.cos(da));h.face+=da*Math.min(1,dt*8);h.cd-=dt;const want=h.kind===4?8:10,rad=d<want-3?-1:d>want+3?1:0;
+        mx=dx/d*rad-dz/d*.5*h.dir;mz=dz/d*rad+dx/d*.5*h.dir;sp=h.kind===4?3.2:2.2;if(Math.random()<dt*.3)h.dir=-h.dir;
+        if(h.cd<=0&&d<17&&!PL.dead){h.st=9;h.t=h.kind===4?.85:.9;h.cut=0;pulse(h.x,P.y+1.2,h.z,.9,.5);tone({f0:1700,f1:2300,dur:.25,vol:.04,rev:1})}break}
+      case 9:{let da=Math.atan2(dx,dz)-h.face;da=Math.atan2(Math.sin(da),Math.cos(da));h.face+=da*Math.min(1,dt*10);h.t-=dt;lean=-.1;
+        if(h.t<=0){fireAt(h);h.cut++;if(h.cut>=(h.kind===4?(h.hp<10?5:3):3)){h.st=8;h.cd=h.kind===4?2.3:2.8}else h.t=h.kind===4?.42:.5}break}
+      case 7:mx=-dx/d;mz=-dz/d;sp=2.6;h.face=Math.atan2(mx,mz);if(d>24){rmHollow(h);continue}break}
+    for(const o of hol)if(o!==h&&o.st!==6&&o.st!==7){const ox=h.x-o.x,oz=h.z-o.z,od=Math.hypot(ox,oz);if(od<1.5&&od>0){mx+=ox/od*.8;mz+=oz/od*.8;if(!sp)sp=1.5}}
+    const kd=Math.exp(-dt*5);h.kx*=kd;h.kz*=kd;const nx=h.x+(mx*sp+h.kx)*dt,nz=h.z+(mz*sp+h.kz)*dt,y0=effH(Math.floor(h.x),Math.floor(h.z));
+    const ok=(ax,az)=>!blockedAt(ax,az)&&Math.abs(effH(Math.floor(ax),Math.floor(az))-y0)<=1&&tileH(Math.floor(ax),Math.floor(az))>=0;
+    if(ok(nx,nz)){h.x=nx;h.z=nz}else if(ok(nx,h.z)){h.x=nx;h.z+=Math.sign(dz)*sp*.5*dt}else if(ok(h.x,nz)){h.z=nz;h.x+=Math.sign(dx)*sp*.5*dt}if(sp&&(mx||mz))h.walk+=dt*10;
+    h.swa+=(swT-h.swa)*Math.min(1,dt*(h.st===3?26:10));h.sw.rotation.x=h.swa;h.lean+=(lean-h.lean)*Math.min(1,dt*10);h.body.rotation.x=h.lean;
+    h.poT+=dt;if(h.poT>2.5&&!h.brk)h.po=Math.max(0,h.po-dt*.6);h.bar.visible=h.po>.05;h.bar.scale.x=Math.max(.001,Math.min(1,h.po/h.pm))*1.1;
+    h.grp.position.set(h.x,y0+Math.abs(Math.sin(h.walk))*.05,h.z);h.grp.rotation.y=h.face}
+  const bb=bossRef&&bossRef.agg?bossRef:boss2&&boss2.agg?boss2:null;if(bb){$('boss').firstChild.textContent=bb.kind===2?'The Drillmaster':'The Certain Archer';$('boss').lastChild.firstChild.style.width=Math.max(0,bb.hp/bb.hm*100)+'%'}}
+function addPo(h,n){if(h.brk||(h.st===6||h.st===7))return;h.po+=n;h.poT=0;if(h.po>=h.pm){h.po=h.pm;h.brk=true;h.st=5;h.t=h.kind===2||h.kind===4?2.2:2.6;pulse(h.x,P.y,h.z,2.4,.7,0xffd866);tone({f0:520,f1:780,dur:.35,vol:.1,type:'triangle',rev:1});
+    if(!C2.seenBrk){C2.seenBrk=true;say('Its guard is broken. One clean cut ends it.',5)}}}
+function killHollow(h){h.st=6;h.t=0;h.bar.visible=false;leafBurst(h.x,P.y+.8,h.z,16,PAPER,2.6);leafBurst(h.x,P.y+.8,h.z,10,ROSEP,2.2);pulse(h.x,P.y,h.z,2.6,1);pluck(69,{vol:.07,dur:2.4});
+  if(h.kind===2)bossDown();else if(h.kind===4)c2Down();else if(Math.random()<.4){P.motes++;hud();gainSpirit(1);burst(P.x,P.y+1,P.z,6,1.4);pluck(76,{vol:.1,dur:1.6})}}
+function hitHollows(fx,fz,heavy){const stone=PL.stance===1;for(const h of hol){if((h.st===6||h.st===7))continue;const dx=h.x-P.x,dz=h.z-P.z,d=Math.hypot(dx,dz)||1,big=h.kind===2||h.kind===4;if(d>(heavy?2.6:2.2)+(big?.4:0)||(d>.5&&(dx*fx+dz*fz)/d<.1))continue;
+    if(big&&!h.agg){say(h.kind===4?'It does not turn. Wake a shrine of this wood first.':CHP.fat?'Step into the ring.':'Your blade finds nothing to cut. It does not see you yet.',4);continue}
+    if(h.kind===1&&h.st<=1&&!heavy&&!stone&&!h.brk){burst((P.x+h.x)/2,P.y+.8,(P.z+h.z)/2,3,1.4);tone({f0:1300,f1:900,dur:.12,vol:.08,type:'triangle',rev:1});h.agg=true;if(h.st===0)h.st=1;addPo(h,1);continue}
+    const arm=h.st===2||h.st===3,fin=h.brk;let dmg=heavy?(stone?4:3):1;if(fin)dmg=big?6:99;
+    h.hp-=dmg;h.agg=true;if(h.st===0)h.st=h.kind>=3?8:1;
+    burst(h.x,P.y+.8,h.z,heavy||fin?9:5,2);leafBurst(h.x,P.y+.9,h.z,heavy||fin?8:4,PAPER,1.7);shake=heavy||fin?.12:.05;tone({f0:heavy?150:230,f1:heavy?70:120,dur:.16,vol:.2,type:'triangle'});noise({f0:2600,f1:800,dur:.07,vol:.1,type:'lowpass'});
+    if(fin){h.brk=false;h.po=0;gainRes(1);pulse(h.x,P.y,h.z,3.2,.8,0xffd866);tone({f0:880,f1:1320,dur:.5,vol:.07,rev:1})}else addPo(h,heavy?(stone?5:3):(stone?2:1));
+    if(h.hp<=0){killHollow(h);continue}
+    if(h.kind===2){const p=h.hp>13?0:h.hp>6?1:2;if(p!==h.phase){h.phase=p;pulse(h.x,P.y,h.z,5,1.2,0xfff3c4);say('The drill quickens.',4);tone({f0:110,f1:70,dur:.8,vol:.16,type:'triangle'})}}
+    if(h.kind===4){if(!h.brk){h.kx=dx/d*11;h.kz=dz/d*11;h.st=8;h.cd=.9}}
+    else if(!h.brk&&h.kind!==2&&(!arm||heavy)){h.st=5;h.t=heavy?1:.4;h.kx=dx/d*(heavy?5:2.5);h.kz=dz/d*(heavy?5:2.5)}}}
+function bossDown(){CHP.un=true;bossRef=null;$('boss').classList.remove('on');pulse(DY.x+.5,DY.h,DY.z+.5,14,3,0xfff3c4);bloomRing(DY.x+.5,DY.z+.5,1,9,80,0);
+  [0,4,7,12,16,19,24].forEach((n,i)=>pluck(57+n,{delay:.4+i*.2,vol:.14,dur:3.6}));showBiome('Chapter One · Fatigue');
+  talk('','The drill ends. No one taught it how to stop.');talk('','You are tired. You sit down. It is the first thing that is yours.');say('The grey air thins. The road east to the Golden Wood is open.',14);save();chapterStart()}
+function duelClear(){for(const h of hol)if(h.kind!==2&&h.kind!==4&&h.st!==6&&h.st!==7){h.st=7;h.agg=false}}
+function spawnHollows(dt){CHP.spT-=dt;if(CHP.spT>0||PL.dead||(bossRef&&bossRef.agg)||(boss2&&boss2.agg))return;CHP.spT=4;const night=U.uNight.value>.5;let n=0;for(const h of hol)if(h.kind<2)n++;if(n>=(night?5:3))return;
+  const a=Math.random()*TAU,r=17+Math.random()*5,x=P.x+Math.cos(a)*r,z=P.z+Math.sin(a)*r,tx=Math.floor(x),tz=Math.floor(z);
+  if(outVeil(x,z,8)||Math.hypot(x,z)<24||Math.hypot(x-DY.x,z-DY.z)<13)return;for(const f of fires)if(Math.hypot(f.x-x,f.z-z)<14)return;
+  if(tileH(tx,tz)<.5||blockedAt(x,z))return;sample(tx,tz);if(S.site)return;
+  const cnt=night?3:2;for(let i=0;i<cnt;i++)addHollow(curB===1&&CHP.un&&i===0?3:i===cnt-1&&CHP.fat&&Math.random()<.6?1:0,x+i*1.4,z+(i%2)*1.2)}
+/* campfires */
+const fireG=(()=>{const g=new Geo();for(let k=0;k<3;k++)g.add(TP.box,M(0,.05,0,.14,.14,.9,k*PI/3),WOOD,hex(0x8a6a5a));for(let k=0;k<7;k++){const a=k/7*TAU;g.add(TP.ico,M(Math.cos(a)*.62,.08,Math.sin(a)*.62,.26,.2,.26,a),STONE)}return g.build()})(),
+  flameG=new T.ConeGeometry(.24,.8,6).translate(0,.4,0),flameMat=patch(new T.MeshBasicMaterial({color:0xffa84a})),fireLamp=new T.PointLight(0xffb060,0,9,1.6);scene.add(fireLamp);
+function addFire(x,z,y){const grp=new T.Group(),m=new T.Mesh(fireG,worldMat),fl=new T.Mesh(flameG,flameMat),gl=new T.Sprite(haloMat);m.castShadow=true;fl.position.y=.12;gl.position.y=.6;gl.scale.setScalar(2.4);grp.add(m,fl,gl);grp.position.set(x,y,z);scene.add(grp);fires.push({x,z,y,grp,fl,gl})}
+function buildFire(){if(!started||PRO.on||PL.dead)return;if(inv[0]<3||inv[2]<2){say('A campfire needs 3 wood and 2 straw. You carry '+inv[0]+' and '+inv[2]+'.',5);return}
+  const x=P.x+Math.sin(P.face)*1.2,z=P.z+Math.cos(P.face)*1.2,tx=Math.floor(x),tz=Math.floor(z),h=tileH(tx,tz);if(h<.5||blockedAt(x,z)||Math.abs(h-P.y)>.6){say('There is no room for a fire here.',3);return}
+  inv[0]-=3;inv[2]-=2;if(fires.length>=5){const o=fires.shift();scene.remove(o.grp)}addFire(tx+.5,tz+.5,h);CHP.resp={x:P.x,z:P.z};hud();
+  burst(tx+.5,h+.5,tz+.5,10,2);pulse(tx+.5,h,tz+.5,3,1.2,0xffc070);noise({f0:1200,f1:300,dur:.6,vol:.07,type:'lowpass',att:.1});pluck(52,{vol:.12,dur:3});say('The fire will remember you. Rest beside it to heal.',7);save()}
+function updFires(dt,t){let near=null,nd=1e9;for(const f of fires){const d=Math.hypot(f.x-P.x,f.z-P.z);f.fl.scale.set(1+Math.sin(t*11+f.x)*.12,1+Math.sin(t*9+f.z)*.2,1+Math.cos(t*10)*.12);f.gl.scale.setScalar(2.2+Math.sin(t*7+f.x)*.25);if(d<nd){nd=d;near=f}}
+  if(near){fireLamp.position.set(near.x,near.y+.9,near.z);fireLamp.intensity=(.5+U.uNight.value*1.1)*(1+Math.sin(t*13)*.08)}else fireLamp.intensity=0;
+  const at=!!near&&nd<2.8;if(at&&!PL.atFire){CHP.resp={x:P.x,z:P.z};gainSpirit(3);save()}PL.atFire=at;
+  if(at){PL.fireT+=dt;if(PL.fireT>1.3){PL.fireT=0;if(PL.hp<5){PL.hp++;hudV();pluck(64+SCALE[PL.hp%5],{vol:.07,dur:1.6});burst(P.x,P.y+.8,P.z,3,.8)}}}else PL.fireT=0}
+function chapterStart(){hudV();hudK();if(!CHP.un&&!bossRef)bossRef=addHollow(2,DY.x+.5,DY.z+.5);if(CHP.un&&!C2.done&&!boss2)boss2=addHollow(4,GY.x+.5,GY.z+.5)}
+function updChapter(dt,t){updTalk(dt);updVitals(dt);updFires(dt,t);
+  if(PL.dead){PL.deadT+=dt;if(PL.deadT>2.8)respawn()}
+  spawnHollows(dt);updHollows(dt);
+  CHP.veilT-=dt;{const v=veilNow();if(v&&veilK===v.x+","+v.r){const lim=Math.min(v.r,U.uVeil.value)-3,dx=P.x-v.x,dz=P.z-v.z,r=Math.hypot(dx,dz);if(r>lim){P.x=v.x+dx*lim/r;P.z=v.z+dz*lim/r;P.target=null;if(CHP.veilT<=0){CHP.veilT=9;say('The air ahead is grey and still. This land is held shut.',5)}}}}
+  if(!CHP.seenN&&U.uNight.value>.5){CHP.seenN=true;say('Night makes the Hollows bold. Press B to build a campfire: 3 wood, 2 straw.',10)}
+  updC2(dt,t)}
+
+/* ---------- chapter two: doubt, the bow, blessings ---------- */
+const C2={doubt:false,done:false,seen:false,seenBrk:false,chk:0},BOW={has:false,arr:0,draw:0,drawing:false},BLS={kind:null,ch:0,armed:false},arrows=[];
+PL.stance=0;PL.res=0;
+const barMat=new T.SpriteMaterial({color:0xffd866,depthTest:false,transparent:true,opacity:.95}),
+  bowG=(()=>{const g=new Geo();g.add(TP.arch,M(0,0,.25,1.1,1.1,1.1,PI/2,0,PI/2),WOOD,hex(0x9a7a66));return g.build()})(),
+  arrowG=(()=>{const g=new Geo();g.add(TP.box,M(0,-.02,0,.045,.045,.8),cream,hex(0xd9c890));g.add(TP.octa,M(0,0,.42,.1,.1,.2),STONE);return g.build()})(),
+  arrowGf=(()=>{const g=new Geo();g.add(TP.box,M(0,-.02,0,.05,.05,.8),hex(0x2a2740),hex(0x6a2a34));return g.build()})(),
+  aimG=new T.BufferGeometry(),aimL=new T.Line(aimG,new T.LineBasicMaterial({color:0xfff3c4,transparent:true,opacity:.7,depthTest:false}));
+aimG.setAttribute('position',new T.BufferAttribute(new Float32Array(48),3));aimL.frustumCulled=false;aimL.visible=false;aimL.renderOrder=4;scene.add(aimL);
+function veilNow(){return PRO.on?null:!CHP.un?{x:0,z:0,r:VEIL}:!C2.done?{x:170,z:-40,r:320}:null}
+function outVeil(x,z,m){if(Math.hypot(x-GY.x,z-GY.z)<13)return true;const v=veilNow();return!!v&&Math.hypot(x-v.x,z-v.z)>Math.min(v.r,U.uVeil.value)-m}
+function gainRes(n){if(!CHP.fat)return;PL.res=Math.min(3,PL.res+n);hudK()}
+function gainSpirit(n){if(!BLS.kind)return;BLS.ch=Math.min(3,BLS.ch+n);hudK()}
+function hudK(){const p=[],dots=(n,a,b)=>a.repeat(Math.floor(n))+b.repeat(3-Math.floor(n));if(C2.doubt)p.push(PL.stance?'Stone stance':'Reed stance');if(BOW.has)p.push('Arrows '+BOW.arr);
+  if(BLS.kind)p.push((BLS.armed?'▶ ':'')+(BLS.kind==='wind'?'Wind ':'Sun ')+dots(BLS.ch,'◆','◇'));if(CHP.fat)p.push('Resolve '+dots(PL.res,'●','○'));$('kit').textContent=p.join('  ·  ')}
+function setStance(n){if(!C2.doubt||PL.stance===n)return;PL.stance=n;hudK();pulse(P.x,P.y,P.z,1.6,.5);say(n?'Stone stance: slower, breaks guards.':'Reed stance: quick and flowing.',3)}
+function heal(){if(PL.dead||PL.res<1||PL.hp>=5)return;PL.res-=1;PL.hp=Math.min(5,PL.hp+2);hudV();hudK();burst(P.x,P.y+.8,P.z,8,1.4);leafBurst(P.x,P.y+.8,P.z,6,ROSEP,1.2);pluck(72,{vol:.1,dur:2});pluck(76,{vol:.07,dur:2,delay:.12})}
+function armBless(){if(!BLS.kind){say('No blessing yet. A woken shrine lays its nature on your blade.',4);return}if(BLS.ch<1){say('The blessing is spent. Hum by a chime, gather a mote, or rest.',5);return}BLS.armed=!BLS.armed;hudK();if(BLS.armed){pulse(P.x,P.y,P.z,1.4,.5,BLS.kind==='wind'?0xd8ffe8:0xfff3c4);tone({f0:900,f1:1350,dur:.4,vol:.05,rev:1})}}
+function craft(){if(!started||PRO.on||PL.dead)return;if(!C2.doubt){say('Your hands do not know that craft yet.',4);return}
+  if(!BOW.has){if(inv[0]<4||inv[2]<2){say('A bow needs 4 wood and 2 straw. You carry '+inv[0]+' and '+inv[2]+'.',5);return}inv[0]-=4;inv[2]-=2;BOW.has=true;BOW.arr=6;say('A bow, and six arrows. Hold G to draw, release to loose. The wind bends the shot.',9)}
+  else{if(BOW.arr>=20){say('The quiver is full.',3);return}if(inv[0]<1){say('Arrows need 1 wood for four.',4);return}inv[0]-=1;BOW.arr=Math.min(20,BOW.arr+4)}
+  hud();hudK();pluck(60,{vol:.1,dur:1.6});burst(P.x,P.y+.8,P.z,5,1);save()}
+function doubt(){C2.doubt=true;talk('','You were certain of every cut. Now you are not. Doubt comes back to you.');talk('','A hand that doubts can wait for the last moment.');
+  say('Guard at the last moment to deflect, even arrows. 1 and 2 change stance. Press C to craft a bow: 4 wood, 2 straw.',18);hudK();save()}
+function c2Down(){C2.done=true;boss2=null;$('boss').classList.remove('on');pulse(GY.x+.5,GY.h,GY.z+.5,14,3,0xfff3c4);bloomRing(GY.x+.5,GY.z+.5,1,9,80,1);[0,4,7,12,16,19,24].forEach((n,i)=>pluck(59+n,{delay:.4+i*.2,vol:.14,dur:3.6}));
+  showBiome('Chapter Two · Doubt');talk('','It never missed a still target. You stopped being one.');talk('','You are no longer sure. It is the second thing that is yours.');say('The grey air lifts from every land. The road south to Bamboo Hollow is not yet written.',16);save()}
+/* arrows */
+function mkArrow(x,y,z,vx,vz,foe,dmg,full,bl){const m=new T.Mesh(foe?arrowGf:arrowG,worldMat);m.castShadow=true;m.position.set(x,y,z);scene.add(m);return{m,x,y,z,vx,vz,foe,dmg,full,bl,life:0,pierce:bl==='wind'?3:1,done:[]}}
+function fireAt(h){const dx=P.x-h.x,dz=P.z-h.z,sp=h.kind===4?13:13,a=Math.atan2(dx,dz)+(h.kind===4&&h.hp<10?(h.cut-2)*.13:0);
+  arrows.push(mkArrow(h.x+Math.sin(a)*.6,effH(Math.floor(h.x),Math.floor(h.z))+.8,h.z+Math.cos(a)*.6,Math.sin(a)*sp,Math.cos(a)*sp,true,1,false,null));noise({f0:1600,f1:4200,dur:.09,vol:.05});tone({f0:260,f1:130,dur:.1,vol:.07,type:'triangle'})}
+function drawBow(){if(!started||PRO.on)return;if(!BOW.has){if(C2.doubt)say('Press C to craft a bow: 4 wood, 2 straw.',4);return}if(BOW.arr<=0){say('No arrows. Press C to craft four from 1 wood.',4);return}if(PL.dead||BOW.drawing||SW.t<.3)return;BOW.drawing=true;BOW.draw=0}
+function fireBow(){if(!BOW.drawing)return;BOW.drawing=false;aimL.visible=false;if(BOW.draw<.15)return;BOW.arr--;const full=BOW.draw>=.95,b=BLS.armed&&BLS.ch>=1?BLS.kind:null;if(b){BLS.armed=false;BLS.ch-=1}
+  const sx=Math.sin(P.face),cz=Math.cos(P.face);arrows.push(mkArrow(P.x+sx*.5,P.y+.8,P.z+cz*.5,sx*28,cz*28,false,(full?2:1)+(b==='wind'?1:0),full,b));tone({f0:240,f1:120,dur:.12,vol:.12,type:'triangle'});noise({f0:1500,f1:4000,dur:.1,vol:.05});hudK()}
+function updBow(dt){if(!BOW.drawing)return;if(PL.dead){BOW.drawing=false;aimL.visible=false;return}BOW.draw=Math.min(1,BOW.draw+dt/.8);if(CHP.fat)spend(12*dt);
+  let bd=20,ta=null;for(const h of hol){if((h.st===6||h.st===7))continue;const dx=h.x-P.x,dz=h.z-P.z,d=Math.hypot(dx,dz);let da=Math.atan2(dx,dz)-P.face;da=Math.atan2(Math.sin(da),Math.cos(da));if(d<bd&&(h.agg||Math.abs(da)<.9)){bd=d;ta=da}}
+  if(ta!==null){P.face+=ta*Math.min(1,dt*12);player.rotation.y=P.face}
+  const a=aimG.attributes.position,still=BLS.armed&&BLS.kind==='wind';let x=P.x+Math.sin(P.face)*.5,z=P.z+Math.cos(P.face)*.5,vx=Math.sin(P.face)*28,vz=Math.cos(P.face)*28;
+  for(let i=0;i<16;i++){a.setXYZ(i,x,P.y+.8,z);for(let k=0;k<3;k++){if(!still){vx+=wind.x*2.2*.02;vz+=wind.z*2.2*.02}x+=vx*.02;z+=vz*.02}}a.needsUpdate=true;aimL.visible=true;aimL.material.opacity=.25+BOW.draw*.65;
+  if(PL.sta<=0)fireBow()}
+function sunBurst(x,y,z,r,t){pulse(x,y,z,r,1,0xfff3c4);pulse(x,y,z,r*.6,.7,0xffffff);burst(x,y+.8,z,14,3);tone({f0:660,f1:990,dur:.6,vol:.1,rev:1});tone({f0:990,f1:1320,dur:.6,vol:.06,rev:1});
+  for(const h of hol){if((h.st===6||h.st===7)||Math.hypot(h.x-x,h.z-z)>r)continue;if((h.kind===2||h.kind===4)&&!h.agg)continue;h.agg=true;h.st=5;h.t=h.kind===2||h.kind===4?t*.5:t;addPo(h,1)}}
+function blessSlash(fx,fz){if(BLS.kind==='sun'){sunBurst(P.x,P.y,P.z,6.5,3);return}
+  noise({f0:300,f1:2600,dur:.5,vol:.12,q:.8});for(let k=1;k<=4;k++){pulse(P.x+fx*k*2.2,P.y,P.z+fz*k*2.2,1.6,.5+k*.08,0xd8ffe8);leafBurst(P.x+fx*k*2.2,P.y+.6,P.z+fz*k*2.2,4,[.85,1,.9],2)}
+  for(const h of hol){if((h.st===6||h.st===7))continue;const dx=h.x-P.x,dz=h.z-P.z,al=dx*fx+dz*fz;if(al<0||al>9.5||Math.abs(dx*fz-dz*fx)>1.7)continue;if((h.kind===2||h.kind===4)&&!h.agg)continue;
+    h.hp-=1;h.agg=true;h.kx=fx*6;h.kz=fz*6;if(h.hp<=0){killHollow(h);continue}addPo(h,3);if(!h.brk&&h.kind!==2&&h.kind!==4){h.st=5;h.t=1.2}}}
+function arrowHit(a,h){const big=h.kind===2||h.kind===4;if(big&&!h.agg)return;if(h.kind===1&&h.st<=1&&!a.full&&!h.brk){burst(a.x,a.y,a.z,3,1.2);tone({f0:1300,f1:900,dur:.1,vol:.07,type:'triangle',rev:1});h.agg=true;if(h.st===0)h.st=1;addPo(h,1);return}
+  const arm=h.st===2||h.st===3||h.st===9;h.hp-=a.dmg;h.agg=true;if(h.st===0)h.st=h.kind>=3?8:1;burst(h.x,a.y,h.z,5,1.8);leafBurst(h.x,a.y,h.z,4,PAPER,1.5);tone({f0:300,f1:150,dur:.12,vol:.14,type:'triangle'});
+  if(h.hp<=0){killHollow(h);return}addPo(h,a.full?3:1);if(h.kind===2){const p=h.hp>13?0:h.hp>6?1:2;if(p!==h.phase)h.phase=p}if(!h.brk&&!big&&!arm){h.st=5;h.t=.4}}
+function updArrows(dt){for(let i=arrows.length-1;i>=0;i--){const a=arrows[i];a.life+=dt;if(!a.foe&&a.bl!=='wind'){a.vx+=wind.x*2.2*dt;a.vz+=wind.z*2.2*dt}a.x+=a.vx*dt;a.z+=a.vz*dt;let gone=a.life>1.5;
+    if(effH(Math.floor(a.x),Math.floor(a.z))>a.y-.1||blockedAt(a.x,a.z))gone=true;
+    if(a.foe){if(!PL.dead&&Math.hypot(a.x-P.x,a.z-P.z)<.5&&Math.abs(a.y-P.y-.8)<1.3){const r=strikePlayer({x:a.x-a.vx*.2,z:a.z-a.vz*.2},1);if(r===2){a.foe=false;a.vx*=-1.3;a.vz*=-1.3;a.dmg=2;a.full=true;a.bl='wind';a.life=0;scene.remove(a.m);a.m=new T.Mesh(arrowG,worldMat);scene.add(a.m)}else gone=true}}
+    else for(const h of hol){if((h.st===6||h.st===7)||a.done.includes(h))continue;if(Math.hypot(h.x-a.x,h.z-a.z)<.95*h.sc){arrowHit(a,h);a.done.push(h);if(--a.pierce<=0)gone=true;break}}
+    if(gone){if(a.bl==='sun'&&!a.foe)sunBurst(a.x,a.y-.8,a.z,3.5,2);else burst(a.x,a.y,a.z,2,.8);scene.remove(a.m);arrows.splice(i,1)}else{a.m.position.set(a.x,a.y,a.z);a.m.rotation.y=Math.atan2(a.vx,a.vz)}}}
+function updC2(dt,t){updBow(dt);updArrows(dt);
+  if(CHP.un&&!C2.seen&&curB===1){C2.seen=true;talk('','The Golden Wood. A Hollow lowers its blade before it strikes.');talk('','You know that drill. It is your own.');save()}
+  if(boss2){const gx=GY.x+.5,gz=GY.z+.5,yd=Math.hypot(P.x-gx,P.z-gz),r=Math.hypot(boss2.x-gx,boss2.z-gz);if(r>6.6){boss2.x=gx+(boss2.x-gx)/r*6.6;boss2.z=gz+(boss2.z-gz)/r*6.6}
+    if(!boss2.agg&&C2.doubt&&yd<7&&!PL.dead){duelClear();boss2.agg=true;boss2.st=8;boss2.cd=1.2;$('boss').classList.add('on');say('The Certain Archer never misses a still target. Keep moving, or turn its arrows back.',8);pluck(35,{vol:.2,dur:5,type:'triangle'})}
+    else if(boss2.agg&&yd>16)bossReset(boss2)}
+  C2.chk-=dt;if(C2.chk<=0){C2.chk=.5;for(const th of things){if(th.type!==2||!th.awake||th.st.b>1||Math.hypot(th.x-P.x,th.z-P.z)>3.4)continue;const k=th.st.b?'sun':'wind';
+      if(BLS.kind!==k){BLS.kind=k;BLS.ch=3;BLS.armed=false;hudK();say((k==='wind'?'The shrine lays Wind on your blade and bow.':'The shrine lays Sun on your blade and bow.')+' Press T, then strike or loose.',9);pluck(79,{vol:.1,dur:3})}else if(BLS.ch<3){BLS.ch=3;hudK()}}}}
 
 /* ---------- input ---------- */
 const keys={},ptr={down:false,x:0,y:0,ids:new Map(),pinch:0};let started=false;
 addEventListener('keydown',e=>{if(!started)return;const k=e.key.toLowerCase();if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(k))e.preventDefault();
-  if(e.repeat)return;keys[k]=true;if(k==='q')azT-=PI/2;if(k==='e')azT+=PI/2;if(k===' ')hum();if(k==='f'||k==='x')slash();if(k==='m')toggleSound()});
-addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+  if(e.repeat)return;keys[k]=true;if(k==='q')azT-=PI/2;if(k==='e')azT+=PI/2;if(k===' ')hum();if(k==='f'||k==='x')slash();if(k==='b')buildFire();if(k==='c')craft();if(k==='h')heal();if(k==='t')armBless();if(k==='1')setStance(0);if(k==='2')setStance(1);if(k==='g')drawBow();if(k==='m')toggleSound()});
+addEventListener('keyup',e=>{const k=e.key.toLowerCase();keys[k]=false;if(k==='g')fireBow()});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;ptr.down=false});
 const _o=new T.Vector3(),_d=new T.Vector3();
 function pick(cx,cy){const r=canvas.getBoundingClientRect();_o.set((cx-r.left)/r.width*2-1,-((cy-r.top)/r.height*2-1),-1).unproject(cam);cam.getWorldDirection(_d);
@@ -753,24 +970,25 @@ function pickThing(cx,cy){const r=canvas.getBoundingClientRect();let best=null,b
   const sx=(_v.x+1)/2*r.width+r.left,sy=(1-_v.y)/2*r.height+r.top,d=Math.hypot(sx-cx,sy-cy);if(d<bd){bd=d;best=th}}return best}
 canvas.addEventListener('pointerdown',e=>{if(!started)return;canvas.focus();try{canvas.setPointerCapture(e.pointerId)}catch(_){}
   ptr.ids.set(e.pointerId,[e.clientX,e.clientY]);if(ptr.ids.size===2){ptr.down=false;const p=[...ptr.ids.values()];ptr.pinch=Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1]);return}
-  if(e.button===2){const h=pick(e.clientX,e.clientY);if(h&&Math.hypot(h.x-P.x,h.z-P.z)>.3){P.face=Math.atan2(h.x-P.x,h.z-P.z);player.rotation.y=P.face}P.target=null;slash(true);return}
+  if(e.button===2){const h=pick(e.clientX,e.clientY);if(h&&Math.hypot(h.x-P.x,h.z-P.z)>.3){P.face=Math.atan2(h.x-P.x,h.z-P.z);player.rotation.y=P.face}P.target=null;if(BOW.has&&BOW.arr>0)drawBow();else slash(true);return}
   const th=pickThing(e.clientX,e.clientY);if(th&&Math.hypot(th.x-P.x,th.z-P.z)<16&&th.cool<=0){ringChime(th);return}
   ptr.down=true;ptr.x=e.clientX;ptr.y=e.clientY;const h=pick(ptr.x,ptr.y);if(h){P.target=h;P.stuck=0;pulse(h.x,effH(Math.floor(h.x),Math.floor(h.z)),h.z,.7,.6)}});
 canvas.addEventListener('pointermove',e=>{if(ptr.ids.has(e.pointerId))ptr.ids.set(e.pointerId,[e.clientX,e.clientY]);
   if(ptr.ids.size===2){const p=[...ptr.ids.values()],d=Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1]);if(ptr.pinch>0)view=clamp(view*ptr.pinch/d,12,26);ptr.pinch=d;return}
   if(ptr.down){ptr.x=e.clientX;ptr.y=e.clientY}});
-const pup=e=>{ptr.ids.delete(e.pointerId);ptr.down=false;ptr.pinch=0};canvas.addEventListener('pointerup',pup);canvas.addEventListener('pointercancel',pup);
+const pup=e=>{ptr.ids.delete(e.pointerId);ptr.down=false;ptr.pinch=0;if(e.button===2)fireBow()};canvas.addEventListener('pointerup',pup);canvas.addEventListener('pointercancel',pup);
 canvas.addEventListener('wheel',e=>{e.preventDefault();view=clamp(view*(1+Math.sign(e.deltaY)*.08),12,26)},{passive:false});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 function toggleSound(){A.on=!A.on;if(A.master)A.master.gain.setTargetAtTime(A.on?.6:0,A.ctx.currentTime,.2);$('bs').style.opacity=A.on?1:.45}
-$('bl').onclick=()=>{azT-=PI/2};$('br').onclick=()=>{azT+=PI/2};$('bs').onclick=toggleSound;$('bx').onclick=()=>slash();
+$('bl').onclick=()=>{azT-=PI/2};$('br').onclick=()=>{azT+=PI/2};$('bs').onclick=toggleSound;$('bx').onclick=()=>slash();$('bb').onclick=buildFire;{const g=$('bg');g.onpointerdown=()=>{PL.tb=true};g.onpointerup=g.onpointerleave=g.onpointercancel=()=>{PL.tb=false}}
 
 /* ---------- save ---------- */
 let proDone=false;
-function save(){if(PRO.on)return;try{localStorage.setItem('stillwander1',JSON.stringify({x:P.x,z:P.z,m:P.motes,c:[...collected].slice(-600),a:[...awake],g:[...awakeBiomes],t:tod,s:seen,f:[...felled].slice(-3000),r:inv,p:1}))}catch(e){}}
-try{const d=JSON.parse(localStorage.getItem('stillwander1')||'null');if(d&&isFinite(d.x)&&isFinite(d.z)){P.x=d.x;P.z=d.z;P.motes=d.m|0;(d.c||[]).forEach(k=>collected.add(k));(d.a||[]).forEach(k=>awake.add(k));(d.g||[]).forEach(k=>awakeBiomes.add(k));if(isFinite(d.t))tod=d.t;if(d.s)Object.assign(seen,d.s);proDone=!!d.p;(d.f||[]).forEach(k=>felled.add(k));if(Array.isArray(d.r))for(let i=0;i<3;i++)inv[i]=d.r[i]|0}}catch(e){}
+function save(){if(PRO.on)return;try{localStorage.setItem('stillwander3',JSON.stringify({x:P.x,z:P.z,m:P.motes,c:[...collected].slice(-600),a:[...awake],g:[...awakeBiomes],t:tod,s:seen,f:[...felled].slice(-3000),r:inv,p:1,ch:{f:CHP.fat?1:0,u:CHP.un?1:0,h:PL.hp,r:CHP.resp,sh:CHP.seenH?1:0,sn:CHP.seenN?1:0},fr:fires.map(f=>[f.x,f.z,f.y]),c2:{d:C2.doubt?1:0,dn:C2.done?1:0,s:C2.seen?1:0,sb:C2.seenBrk?1:0,bow:BOW.has?1:0,arr:BOW.arr,st:PL.stance,res:PL.res,bk:BLS.kind,bc:BLS.ch}}))}catch(e){}}
+try{const d=JSON.parse(localStorage.getItem('stillwander3')||'null');if(d&&isFinite(d.x)&&isFinite(d.z)){P.x=d.x;P.z=d.z;P.motes=d.m|0;(d.c||[]).forEach(k=>collected.add(k));(d.a||[]).forEach(k=>awake.add(k));(d.g||[]).forEach(k=>awakeBiomes.add(k));if(isFinite(d.t))tod=d.t;if(d.s)Object.assign(seen,d.s);proDone=!!d.p;if(d.ch){CHP.fat=!!d.ch.f;CHP.un=!!d.ch.u;PL.hp=clamp(d.ch.h|0,1,5);CHP.resp=d.ch.r||null;CHP.seenH=!!d.ch.sh;CHP.seenN=!!d.ch.sn}(d.fr||[]).forEach(f=>addFire(f[0],f[1],f[2]));if(d.c2){C2.doubt=!!d.c2.d;C2.done=!!d.c2.dn;C2.seen=!!d.c2.s;C2.seenBrk=!!d.c2.sb;BOW.has=!!d.c2.bow;BOW.arr=d.c2.arr|0;PL.stance=d.c2.st?1:0;PL.res=+d.c2.res||0;BLS.kind=d.c2.bk||null;BLS.ch=+d.c2.bc||0}(d.f||[]).forEach(k=>felled.add(k));if(Array.isArray(d.r))for(let i=0;i<3;i++)inv[i]=d.r[i]|0}}catch(e){}
 
 const home={x:P.x,z:P.z};
+if(proDone)chapterStart();
 if(!proDone){PRO.on=true;P.x=PM.x+.5;P.z=PM.z+3.5;P.face=PI;tod=.9;proSetup()}
 $('skip').onclick=()=>{if(PRO.on&&started)proEnd()};
 
@@ -783,11 +1001,11 @@ function movePlayer(dt){let mx=0,mz=0;const fx=-Math.sin(az),fz=-Math.cos(az),rx
   else{if(ptr.down){const h=pick(ptr.x,ptr.y);if(h)P.target=h}
     if(P.target){const dx=P.target.x-P.x,dz=P.target.z-P.z,d=Math.hypot(dx,dz);if(d<.15)P.target=null;else{mx=dx;mz=dz}}}
   const l=Math.hypot(mx,mz);let moving=false,lev=false;
-  if(l>.001){mx/=l;mz/=l;const sp=4.3*dt,nx=P.x+mx*sp,nz=P.z+mz*sp,nh=effH(Math.floor(nx+mx*.25),Math.floor(nz+mz*.25));
+  if(l>.001){mx/=l;mz/=l;const sp=(PL.dead||PL.stun>0?0:PL.block?2:BOW.drawing?3.4:4.3)*dt,nx=P.x+mx*sp,nz=P.z+mz*sp,nh=effH(Math.floor(nx+mx*.25),Math.floor(nz+mz*.25));
     if(nh-P.y>.8){P.y+=dt*5.5;lev=true;if(Math.random()<dt*14)burst(P.x,P.y+.1,P.z,1,.8)}
     else{const ox=P.x,oz=P.z;if(!blockedAt(nx+mx*.22,nz+mz*.22)){P.x=nx;P.z=nz}else if(!blockedAt(nx+Math.sign(mx)*.22,P.z)){P.x=nx}else if(!blockedAt(P.x,nz+Math.sign(mz)*.22)){P.z=nz}
       moving=Math.hypot(P.x-ox,P.z-oz)>sp*.2;if(!moving&&P.target){P.stuck+=dt;if(P.stuck>.5)P.target=null}else P.stuck=0}
-    let da=Math.atan2(mx,mz)-P.face;da=Math.atan2(Math.sin(da),Math.cos(da));P.face+=da*Math.min(1,dt*10)}
+    if(!BOW.drawing&&!PL.block){let da=Math.atan2(mx,mz)-P.face;da=Math.atan2(Math.sin(da),Math.cos(da));P.face+=da*Math.min(1,dt*10)}}
   const tx=Math.floor(P.x),tz=Math.floor(P.z),gh=effH(tx,tz);
   if(!lev){if(gh>P.y){const o=P.y;P.y=Math.min(gh,P.y+dt*7);if(gh-o>.3&&P.hop<=0)P.hop=1}else if(gh<P.y)P.y=Math.max(gh,P.y-dt*(4+(P.y-gh)*3))}
   P.hop=Math.max(0,P.hop-dt*3.4);P.walk+=(moving||lev?1:0)*dt*11;
@@ -795,9 +1013,11 @@ function movePlayer(dt){let mx=0,mz=0;const fx=-Math.sin(az),fz=-Math.cos(az),rx
   const bob=moving?Math.abs(Math.sin(P.walk))*.07:Math.sin(performance.now()*.002)*.015;
   player.position.set(P.x,P.y+bob+Math.sin(P.hop*PI)*.2,P.z);player.rotation.y=P.face;pbody.rotation.x=moving?.1:0;pbody.scale.y=1+(moving?Math.sin(P.walk*2)*.03:0)}
 const _pv=new T.Vector3();let last=performance.now(),time=0,saveT=0,arrowT=0,nearSite=null;
-function frame(now){requestAnimationFrame(frame);const dt=Math.min(.05,(now-last)/1000);last=now;time+=dt;U.uTime.value=time;
+function frame(now){requestAnimationFrame(frame);const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;time+=dt;U.uTime.value=time;
   tod=(tod+dt/DAYLEN)%1;applyTime();
-  if(started){movePlayer(dt);updSword(dt)}if(PRO.on){if(started)updPro(dt);else updFoes(dt)}updateChunks(false);updCuts(dt);updLeaves(dt,time);updDrops(dt);updStones(dt);updThings(dt,time);updBlooms(dt);updFx(dt);updPoints(dt,time);updBirds(dt,time);updMusic(dt);
+  if(started){movePlayer(dt);updSword(dt)}if(PRO.on){if(started)updPro(dt);else updFoes(dt)}else if(started)updChapter(dt,time);
+  {const v=veilNow(),k=v?v.x+','+v.r:'';if(k!==veilK){veilK=k;if(v){U.uVeilC.value.set(v.x,v.z);U.uVeil.value=started&&U.uVeil.value<1e4?Math.max(U.uVeil.value,Math.hypot(P.x-v.x,P.z-v.z)+30):v.r}}
+    U.uVeil.value=Math.min(v?v.r:1e5,U.uVeil.value+dt*70)}updateChunks(false);updCuts(dt);updLeaves(dt,time);updDrops(dt);updStones(dt);updThings(dt,time);updBlooms(dt);updFx(dt);updPoints(dt,time);updBirds(dt,time);updMusic(dt);
   // trail
   for(let i=0;i<trail.length;i++){const s=trail[i],on=i<P.motes;const tg=i===0?_pv.set(P.x-Math.sin(P.face)*.5,P.y+1.1,P.z-Math.cos(P.face)*.5):trail[i-1].position;
     s.position.lerp(tg,Math.min(1,dt*(7-i*.35)));if(i>0&&s.position.distanceTo(tg)<.34)s.position.addScaledVector(_v.copy(s.position).sub(tg).normalize(),.01);
@@ -818,6 +1038,7 @@ function frame(now){requestAnimationFrame(frame);const dt=Math.min(.05,(now-last
   // shrine pointer
   arrowT-=dt;if(arrowT<=0){arrowT=.5;nearSite=null;let bd=1e9;const rx=Math.floor(P.x/RS),rz=Math.floor(P.z/RS);
     for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++){const s=siteAt(rx+dx,rz+dz);if(awake.has(s.key))continue;const d=Math.hypot(s.x-P.x,s.z-P.z);if(d<bd){bd=d;nearSite=s}}
+    if(CHP.fat&&!CHP.un)nearSite=DY;else if(C2.doubt&&!C2.done)nearSite=GY;
     if(nearSite){const dx=nearSite.x-P.x,dz=nearSite.z-P.z,l=Math.hypot(dx,dz)||1;wind.tx=dx/l*1.5;wind.tz=dz/l*1.5}}
   const ar=$('arrow');if(nearSite&&started&&!PRO.on){_v.set(nearSite.x+.5,nearSite.h+2,nearSite.z+.5).project(cam);
     if(Math.abs(_v.x)<.86&&Math.abs(_v.y)<.8)ar.style.opacity=0;else{const m=Math.max(Math.abs(_v.x)/.9,Math.abs(_v.y)/.84);ar.style.opacity=P.motes>=3?1:.5;
