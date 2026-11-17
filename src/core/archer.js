@@ -21,6 +21,7 @@ export class Archer extends Character {
     this.bow = new Bow();
     this.inventory = new Inventory();
     this.flaws = [];
+    this.mount = null;            // a calmed beast carrying the archer
     this.stamina = Archer.MAX_STAMINA;
     this.resolve = 0;
     this.stepLeft = 0;
