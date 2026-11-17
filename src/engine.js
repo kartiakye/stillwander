@@ -534,7 +534,7 @@ const seen={mote:false,chime:false,cut:false};
 function ringChime(th,delay=0){if(delay>0){th.delay=delay;return}th.v=7;th.cool=.5;hooks.chime(th);const ins=INST[th.b];
   pluck(60+ins.oct*12+SCALE[th.note],{type:ins.type,dur:ins.dur+.6,vol:.17});pluck(72+ins.oct*12+SCALE[(th.note+2)%5],{dur:1.6,vol:.06,delay:.12});
   pulse(th.x,th.y,th.z,3.2,1.3,0xffffff);burst(th.x,th.y+1.5,th.z,7);bloomRing(th.x,th.z,.7,2.4,6,th.b);
-  if(!seen.chime){seen.chime=true;say('Press Space to hum. Everything nearby answers.',7)}}
+  if(!seen.chime){seen.chime=true;say('Press H to hum. Everything nearby answers.',7)}}
 function collect(th){collected.add(th.key);dropThing(th);const i=th.ch.things.indexOf(th);if(i>=0)th.ch.things.splice(i,1);P.motes++;hud();
   burst(th.x,th.obj.position.y,th.z,9);pluck(72+SCALE[P.motes%5],{vol:.14,dur:1.6});pluck(79+SCALE[P.motes%5],{vol:.09,dur:1.8,delay:.11});
   if(!seen.mote){seen.mote=true;say('Light follows you. Carry three to a sleeping shrine. The wind and the diamond at the edge point the way.',10)}

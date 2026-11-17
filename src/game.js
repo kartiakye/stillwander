@@ -9,6 +9,7 @@ import { Burning, Chilled, Frozen, Stunned, Blinded, Lulled } from './core/effec
 import { Inventory } from './core/inventory.js';
 import { toggleMap, mapOpen } from './mapview.js';
 import * as MAP from './map.js';
+import { placeHerds, drawBeasts, beastEvent, beastKey, senseArcher, beastSave } from './beasts.js';
 
 const { T, scene, P, player, worldMat, Geo, TP, M, hex, colours } = engine;
 const { VERM, cream, gold, dark, white, WOOD } = colours;
@@ -158,6 +159,7 @@ hooks.pointer = (kind, hit, button) => {
 };
 
 hooks.key = k => {
+  if (beastKey(k)) return;
   if (k === 'c') craft();
   else if (k === 'f') gather();
   else if (k === 't') cycle();
@@ -203,7 +205,7 @@ function sidestep() {
 }
 
 // ---- the engine asks, the game answers ------------------------------------------
-hooks.speed = () => archer.bow.drawing ? 0.45 : 1;
+hooks.speed = () => (archer.bow.drawing ? 0.45 : 1) * (archer.mount ? archer.mount.constructor.rideSpeed : 1);
 hooks.face = () => (archer.bow.drawing || steered().length) ? toEngine(aimAngle()) : null;
 hooks.timeScale = () => steered().length ? SLOW : 1;
 
@@ -219,7 +221,8 @@ hooks.awaken = th => {          // a woken shrine blesses the bow, never the arc
 hooks.chime = () => { if (archer.bow.blessings.length) { archer.bow.recharge(1); hudKit(); } };
 
 hooks.begin = () => {
-  load();
+  const saved = load();
+  placeHerds(world, saved && saved.beasts);
   placeTargets();
   const yard = MAP.LANDMARKS.find(l => l.kind === 'yard');
   placeTargets(yard.x, yard.z, [4, 5.5, 4.5, 6, 5]);
@@ -231,15 +234,17 @@ hooks.update = (dt, time) => {
   archer.x = P.x; archer.z = P.z;
   if (hooks.face() === null && !archer.sidestepping) archer.facing = fromEngine(P.face);
   for (const a of steered()) if (pointer) a.steerTowards(pointer.x, pointer.z);
+  senseArcher();
   world.wet = engine.land === 4;           // the marsh carries thunder further
   world.update(dt);
   P.x = archer.x; P.z = archer.z;          // a sidestep moves the wanderer
   for (const [kind, data] of world.drainEvents()) onEvent(kind, data);
-  drawBow(); drawAim(); drawArrows(); drawStuck(); drawFigures(dt); drawMarks(dt, time); drawFx(dt);
+  drawBow(); drawAim(); drawArrows(); drawStuck(); drawFigures(dt); drawBeasts(dt, time); drawMarks(dt, time); drawFx(dt);
   saveT += dt; if (saveT > 6) { saveT = 0; save(); }
 };
 
 function onEvent(kind, data) {
+  if (kind !== 'hit' && beastEvent(kind, data)) return;
   if (kind === 'loose') {
     const fromArcher = data[0].owner === archer;
     if (data[0].sibling) return;          // a split arrow's twins share its sound
@@ -390,13 +395,14 @@ function save() {
       blessings: archer.bow.blessings.map(b => b.label),
       selected: archer.bow.selected ? archer.bow.selected.label : null,
       charges: archer.bow.charges,
+      beasts: beastSave(),
     }));
   } catch (_) { /* storage unavailable: play on without it */ }
 }
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
-    if (!s) return;
+    if (!s) return null;
     archer.inventory.arrows = s.arrows;
     for (const label of s.blessings || []) {
       const Kind = LAND_BLESSINGS.find(K => K.label === label);
@@ -405,7 +411,8 @@ function load() {
     archer.bow.charges = s.charges || 0;
     const sel = LAND_BLESSINGS.find(K => K.label === s.selected);
     archer.bow.select(sel || null);
-  } catch (_) { /* a broken save is ignored */ }
+    return s;
+  } catch (_) { return null; /* a broken save is ignored */ }
 }
 addEventListener('pagehide', save);
 
