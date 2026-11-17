@@ -10,12 +10,15 @@ import { Inventory } from './core/inventory.js';
 import { toggleMap, mapOpen } from './mapview.js';
 import * as MAP from './map.js';
 import { placeHerds, drawBeasts, beastEvent, beastKey, senseArcher, beastSave } from './beasts.js';
+import { placeFolk, drawFolk, folkEvent, folkKey, folkSave, hollowMesh, poseHollow } from './folk.js';
+import { beginStory, storySave, storyEvent, storyTick, storyKey, storyOpen, shrineWoke, giftArrow } from './story.js';
 
 const { T, scene, P, player, worldMat, Geo, TP, M, hex, colours } = engine;
 const { VERM, cream, gold, dark, white, WOOD } = colours;
 const PI = Math.PI, TAU = PI * 2;
 const STRAW = 2;                 // the engine's material slot for straw
 const SLOW = 0.55;               // the world's pace while a steered arrow flies
+const HOLLOW_RESPAWN = 150;      // seconds before a fallen Hollow stands at its post again
 const RESPAWN = 10;              // seconds before a fallen target stands again
 const SAVE_KEY = 'stillwander-bow3-kit';
 document.getElementById('bmap').onclick = () => toggleMap();
@@ -150,6 +153,7 @@ function steered() { return world.arrows.filter(a => a.steerable && !a.seeks && 
 hooks.pointer = (kind, hit, button) => {
   if (hit) pointer = hit;
   if (kind === 'cancel') { archer.bow.cancel(); return; }
+  if (storyOpen()) { archer.bow.cancel(); return; }
   if (kind === 'down') {
     if (archer.draw()) engine.noise({ f0: 700, f1: 2000, dur: 0.5, vol: 0.03, att: 0.4 });
     else if (archer.inventory.arrows <= 0) engine.say('No arrows. Four straw make one: press C.', 3);
@@ -159,7 +163,7 @@ hooks.pointer = (kind, hit, button) => {
 };
 
 hooks.key = k => {
-  if (beastKey(k)) return;
+  if (storyKey(k) || beastKey(k) || folkKey(k)) return;
   if (k === 'c') craft();
   else if (k === 'f') gather();
   else if (k === 't') cycle();
@@ -204,16 +208,29 @@ function sidestep() {
   else if (archer.stamina < 25) engine.say('Out of breath.', 1.2);
 }
 
+// The ending: every Hollow on the island lays down its arms, for good.
+let stoodDown = false;
+function standDown(quiet) {
+  stoodDown = true;
+  for (const h of world.hollows) if (!(h instanceof Target) && h.alive) {
+    if (quiet) { h.alive = false; continue; }
+    h.takeDamage(999);
+    engine.bloomRing(h.x, h.z, 0.4, 1.8, 8, engine.land);
+  }
+  respawns.length = 0;
+}
+
 // ---- the engine asks, the game answers ------------------------------------------
 hooks.speed = () => (archer.bow.drawing ? 0.45 : 1) * (archer.mount ? archer.mount.constructor.rideSpeed : 1);
 hooks.face = () => (archer.bow.drawing || steered().length) ? toEngine(aimAngle()) : null;
-hooks.timeScale = () => steered().length ? SLOW : 1;
+hooks.timeScale = () => storyOpen() ? 0.001 : steered().length ? SLOW : 1;
 
 hooks.awaken = th => {          // a woken shrine blesses the bow, never the archer
   const Kind = LAND_BLESSINGS[th.st.b];
   if (archer.bow.bind(new Kind())) {
     archer.bow.select(Kind);
     setTimeout(() => engine.say(GIFT[Kind.label] + ' T changes arrow.', 10), 2600);
+    shrineWoke(Kind);
     placeTargets(th.x, th.z, [7, 9.5, 12, 8.5]);     // a practice ground round the shrine
   } else archer.bow.recharge(3);
   hudKit(true);
@@ -223,6 +240,8 @@ hooks.chime = () => { if (archer.bow.blessings.length) { archer.bow.recharge(1);
 hooks.begin = () => {
   const saved = load();
   placeHerds(world, saved && saved.beasts);
+  placeFolk(world, saved && saved.folk);
+  beginStory(world, saved && saved.story, standDown);
   placeTargets();
   const yard = MAP.LANDMARKS.find(l => l.kind === 'yard');
   placeTargets(yard.x, yard.z, [4, 5.5, 4.5, 6, 5]);
@@ -235,18 +254,22 @@ hooks.update = (dt, time) => {
   if (hooks.face() === null && !archer.sidestepping) archer.facing = fromEngine(P.face);
   for (const a of steered()) if (pointer) a.steerTowards(pointer.x, pointer.z);
   senseArcher();
+  storyTick();
   world.wet = engine.land === 4;           // the marsh carries thunder further
   world.update(dt);
   P.x = archer.x; P.z = archer.z;          // a sidestep moves the wanderer
-  for (const [kind, data] of world.drainEvents()) onEvent(kind, data);
-  drawBow(); drawAim(); drawArrows(); drawStuck(); drawFigures(dt); drawBeasts(dt, time); drawMarks(dt, time); drawFx(dt);
+  for (const [kind, data] of world.drainEvents()) onEvent(kind, data, time);
+  drawBow(); drawAim(); drawArrows(); drawStuck(); drawFigures(dt); drawBeasts(dt, time); drawFolk(dt, time); drawMarks(dt, time); drawFx(dt);
   saveT += dt; if (saveT > 6) { saveT = 0; save(); }
 };
 
-function onEvent(kind, data) {
+function onEvent(kind, data, time) {
+  storyEvent(kind, data);
+  if (folkEvent(kind, data, time)) return;
   if (kind !== 'hit' && beastEvent(kind, data)) return;
   if (kind === 'loose') {
     const fromArcher = data[0].owner === archer;
+    if (fromArcher) giftArrow(data[0]);
     if (data[0].sibling) return;          // a split arrow's twins share its sound
     engine.noise({ f0: 2600, f1: 900, dur: 0.16, vol: fromArcher ? 0.09 : 0.05, type: 'highpass' });
     engine.tone({ f0: 520, f1: 210, dur: 0.14, vol: 0.06, type: 'triangle' });
@@ -347,7 +370,7 @@ function drawStuck() {
 function drawFigures(dt) {
   for (const c of world.hollows) {
     if (figures.has(c)) continue;
-    const m = new T.Mesh(targetGeo, worldMat);
+    const m = hollowMesh(c) || new T.Mesh(targetGeo, worldMat);
     m.castShadow = m.receiveShadow = true;
     m.position.set(c.x, terrain.height(c.x, c.z), c.z);
     m.rotation.y = Math.atan2(P.x - c.x, P.z - c.z);
@@ -356,8 +379,10 @@ function drawFigures(dt) {
   }
   for (const [c, f] of figures) {
     f.punch = Math.max(0, f.punch - dt * 5);
+    const hollow = !(c instanceof Target);
+    if (hollow && c.alive) { poseHollow(c, f, dt, world.time); continue; }
     const s = 1 + 0.2 * Math.sin(f.punch * PI);
-    f.mesh.scale.set(s, 1 / s, s);
+    if (!hollow) f.mesh.scale.set(s, 1 / s, s);
     if (c.alive) { f.mesh.rotation.x = -0.18 * f.punch; continue; }
     f.fallen += dt;
     f.mesh.rotation.x = -Math.min(1.5, f.fallen * 4.5);          // it tips over backwards
@@ -365,12 +390,17 @@ function drawFigures(dt) {
       scene.remove(f.mesh);
       figures.delete(c);
       world.hollows.splice(world.hollows.indexOf(c), 1);
-      respawns.push([world.time + RESPAWN, c.x, c.z]);
+      if (hollow) respawns.push([world.time + HOLLOW_RESPAWN, c.home ? c.home[0] : c.x, c.home ? c.home[1] : c.z, c.constructor]);
+      else respawns.push([world.time + RESPAWN, c.x, c.z, Target]);
     }
   }
   for (let i = respawns.length - 1; i >= 0; i--) {
     if (respawns[i][0] > world.time) continue;
-    world.hollows.push(new Target(respawns[i][1], respawns[i][2]));
+    const [, rx, rz, Kind] = respawns[i];
+    if (Kind !== Target && (stoodDown || Math.hypot(rx - archer.x, rz - archer.z) < 45)) continue;   // Hollows return only when you are away
+    const back = new Kind(rx, rz);
+    if (Kind !== Target) back.home = [rx, rz];
+    world.hollows.push(back);
     respawns.splice(i, 1);
   }
 }
@@ -396,6 +426,8 @@ function save() {
       selected: archer.bow.selected ? archer.bow.selected.label : null,
       charges: archer.bow.charges,
       beasts: beastSave(),
+      folk: folkSave(),
+      story: storySave(),
     }));
   } catch (_) { /* storage unavailable: play on without it */ }
 }
