@@ -52,6 +52,7 @@ export class World {
     this.wet = false;            // rain or marsh: thunder reaches further
     this.graces = [];
     this.beasts = [];            // the old-age beasts; see beast.js
+    this.folk = [];              // villagers; see villager.js
     this.archerMoving = false;   // set by the game each frame: footsteps can be heard
     this.archerHidden = false;   // ... and hidden in tall grass
     this.events = [];
@@ -109,6 +110,11 @@ export class World {
     for (const c of this.hostilesNear(arrow.x, arrow.z, 3, arrow.owner)) {
       if (arrow.struck.includes(c)) continue;
       if (Math.hypot(c.x - arrow.x, c.z - arrow.z) > c.radius + arrow.constructor.HIT_RADIUS) continue;
+      if (c.parts) {             // inside a great beast, fly on until a part is met or the middle is reached
+        const [dx, dz] = arrow.direction, inward = (c.x - arrow.x) * dx + (c.z - arrow.z) * dz > 0;
+        const deep = Math.hypot(c.x - arrow.x, c.z - arrow.z) <= c.radius * 0.35;
+        if (!c.partAt(arrow.x, arrow.z, arrow.constructor.HIT_RADIUS) && inward && !deep) continue;
+      }
       arrow.struck.push(c);
       const res = c.receiveArrow(arrow);
       if (arrow.blessing) arrow.blessing.onHit(arrow, c, res, this);
@@ -193,6 +199,19 @@ export class World {
     return b;
   }
 
+  // ---- villagers
+  talk(reach = 2.6) {            // speak with the nearest villager in reach
+    const a = this.archer;
+    let best = null, bd = reach;
+    for (const v of this.folk) { const d = v.distanceTo(a); if (d <= bd) { bd = d; best = v; } }
+    if (!best) return null;
+    const said = best.talk();
+    best.face(a.x, a.z);
+    if (said.gift && said.gift.arrows) a.inventory.arrows += said.gift.arrows;
+    this.emit('talk', best, said.line, said.gift);
+    return best;
+  }
+
   separateBeasts() {             // great bodies do not walk through one another
     const bs = this.beasts;
     for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
@@ -218,6 +237,7 @@ export class World {
       b.update(dt, this);
     }
     this.separateBeasts();
+    for (const v of this.folk) v.update(dt, this);
     for (const arrow of this.arrows) arrow.update(dt, this);
     this.arrows = this.arrows.filter(a => a.flying);
     this.updateGraces(dt);

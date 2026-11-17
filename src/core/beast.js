@@ -3,6 +3,7 @@
 // those parts away; a beast is never killed, only calmed, and a calmed beast
 // gives the archer its gift.
 import { Character, HitResult } from './character.js';
+import { Frozen } from './effects.js';
 
 export const Mood = Object.freeze({ CALM: 'calm', WARY: 'wary', ALERT: 'alert', CALMED: 'calmed' });
 
@@ -62,6 +63,17 @@ export class Beast extends Character {
   static herdCall = 22;        // an alerted beast spooks its herd within this
   static rideSpeed = 2.2;      // multiplies the archer's pace when ridden
   static range = 10;           // how far it grazes from home
+  // fierce beasts do not run: they charge, strike, and must be calmed mid-fight
+  static fierce = false;
+  static chargeSpeed = 4.2;
+  static reach = 2.2;          // distance at which it starts a blow
+  static strikeReach = 2.9;    // distance at which the blow still lands
+  static windup = 0.8;
+  static recover = 1.4;
+  static strikeDamage = 1;
+  static turn = 5;             // radians per second it turns to face its foe
+  static leash = 34;           // how far from home it will give chase
+  static dormant = false;      // true: it sleeps until the game wakes it
 
   constructor(x = 0, z = 0, herd = null) {
     super(x, z);
@@ -78,9 +90,12 @@ export class Beast extends Character {
     this.following = false;    // a calmed beast walking to the archer
     this.rider = null;
     this.pending = [];         // events gathered between updates
+    this.act = 'chase';        // a fierce beast's step in the fight: chase, windup, recover
+    this.timer = 0;
+    this.dormant = C.dormant;
   }
 
-  get hostile() { return this.alive && this.mood !== Mood.CALMED; }
+  get hostile() { return this.alive && this.mood !== Mood.CALMED && !this.dormant; }
   get calmed() { return this.mood === Mood.CALMED; }
   get keyParts() { return this.parts.filter(p => p.key); }
 
@@ -102,6 +117,7 @@ export class Beast extends Character {
     res.part = part;
     if (part) {
       res.damage = arrow.damage * bite(part.material, label);
+      if (this.has(Frozen) && arrow.shatters) res.damage = part.hp;   // a full draw shatters what frost has seized
       if (part.wear(res.damage)) { res.partBroken = true; this.pending.push(['partBroken', part]); }
       this.startle(this.constructor.partAlarm);
     } else {
@@ -119,7 +135,8 @@ export class Beast extends Character {
     return false;
   }
   checkCalmed() {
-    if (this.calmed || this.mood === Mood.ALERT || this.alarm >= 1) return;   // too frightened to settle
+    if (this.calmed) return;
+    if (!this.constructor.fierce && (this.mood === Mood.ALERT || this.alarm >= 1)) return;   // too frightened to settle
     if (this.keyParts.length && this.keyParts.every(p => p.broken)) this.becomeCalmed();
   }
   becomeCalmed() {
@@ -169,7 +186,7 @@ export class Beast extends Character {
     for (const [kind, ...data] of this.pending) world.emit(kind, this, ...data);
     this.pending = [];
     super.update(dt, world);
-    if (!this.alive || this.rider) return;
+    if (!this.alive || this.rider || this.dormant) return;
     if (this.calmed) { this.idle(dt, world); return; }
     if (!this.canAct) return;
     const C = this.constructor;
@@ -181,7 +198,7 @@ export class Beast extends Character {
       if (this.alarm >= 1) this.spook(world);
       else this.setMood(this.alarm >= 0.4 ? Mood.WARY : Mood.CALM, world);
     }
-    if (this.mood === Mood.ALERT) this.flee(dt, world);
+    if (this.mood === Mood.ALERT) { if (C.fierce) this.fight(dt, world); else this.flee(dt, world); }
     else if (this.mood === Mood.WARY) this.face(world.archer.x, world.archer.z);
     else this.graze(dt, world);
   }
@@ -197,6 +214,31 @@ export class Beast extends Character {
       for (const p of this.keyParts) if (p.broken) { p.regrow(); world.emit('regrow', this, p); }
       this.home = [this.x, this.z];
       this.setMood(Mood.WARY, world);
+    }
+  }
+
+  fight(dt, world) {
+    const a = world.archer, C = this.constructor, d = this.distanceTo(a);
+    const fromHome = Math.hypot(this.x - this.home[0], this.z - this.home[1]);
+    if (!a.alive || fromHome > C.leash) {          // it loses interest and walks home
+      this.alarm = 0; this.act = 'chase'; this.goal = [this.home[0], this.home[1]]; this.rest = 0;
+      this.setMood(Mood.CALM, world);
+      return;
+    }
+    if (this.act === 'chase') {
+      this.turnTowards(this.angleTo(a.x, a.z), dt * C.turn);
+      if (d <= C.reach) { this.act = 'windup'; this.timer = C.windup; world.emit('windup', this); }
+      else if (C.chargeSpeed > 0) this.walk(C.chargeSpeed * this.effects.reduce((s, e) => s * e.speedScale, 1) * dt, world);
+    } else if (this.act === 'windup') {
+      this.timer -= dt;
+      if (this.timer <= 0) {
+        const landed = d <= C.strikeReach && a.takeStrike(C.strikeDamage);
+        world.emit('strike', this, landed);
+        this.act = 'recover'; this.timer = C.recover;
+      }
+    } else {
+      this.timer -= dt;
+      if (this.timer <= 0) this.act = 'chase';
     }
   }
 
@@ -223,7 +265,7 @@ export class Beast extends Character {
       return;
     }
     this.home = [this.x, this.z];
-    this.graze(dt, world);
+    if (this.constructor.speed > 0) this.graze(dt, world);
   }
 
   turnTowards(ang, step) {
@@ -249,4 +291,135 @@ export class MossbackOx extends Beast {
   ];
 }
 
-export const BEASTS = { MossbackOx };
+// Golden Wood. Dead gold leaves weigh down its antlers. It is the shyest beast
+// on the island: it sees far and runs fast. Shake the leaves loose.
+export class GinkgoStag extends Beast {
+  static label = 'Ginkgo Stag';
+  static gift = 'leaf';
+  static radius = 0.95;
+  static sight = 21;
+  static hearing = 9;
+  static fleeSpeed = 8.5;
+  static speed = 1.0;
+  static parts = [
+    { name: 'left antler leaves', material: 'bark', hp: 2.5, at: [0.95, 0.42], y: 2.6, radius: 0.4, key: true, onHead: true },
+    { name: 'right antler leaves', material: 'bark', hp: 2.5, at: [0.95, -0.42], y: 2.6, radius: 0.4, key: true, onHead: true },
+  ];
+}
+
+// Bamboo Hollow. Cane has grown round it like armour. It charges whoever it hears.
+export class HollowBoar extends Beast {
+  static label = 'Hollow Boar';
+  static gift = 'tusk';
+  static fierce = true;
+  static radius = 1.15;
+  static sight = 13;
+  static hearing = 8;
+  static chargeSpeed = 5.4;
+  static windup = 0.55;
+  static recover = 1.7;
+  static range = 7;
+  static parts = [
+    { name: 'brow cane', material: 'bark', hp: 3, at: [1.05, 0], y: 1.25, radius: 0.42, key: true },
+    { name: 'left flank cane', material: 'bark', hp: 3, at: [0, 0.72], y: 1.1, radius: 0.5, key: true },
+    { name: 'right flank cane', material: 'bark', hp: 3, at: [0, -0.72], y: 1.1, radius: 0.5, key: true },
+  ];
+}
+
+// Snow Crest. It wears a shell of ice. Frost seizes the shell; a full draw shatters it.
+export class FrostmaneBear extends Beast {
+  static label = 'Frostmane Bear';
+  static gift = 'fur';
+  static fierce = true;
+  static radius = 1.6;
+  static sight = 12;
+  static hearing = 6;
+  static chargeSpeed = 3.0;
+  static reach = 2.7;
+  static strikeReach = 3.4;
+  static windup = 1.0;
+  static recover = 1.8;
+  static strikeDamage = 2;
+  static range = 6;
+  static parts = [
+    { name: 'ice on its back', material: 'ice', hp: 5, at: [-0.3, 0], y: 2.5, radius: 0.7, key: true },
+    { name: 'ice on its left shoulder', material: 'ice', hp: 4, at: [0.85, 0.85], y: 1.9, radius: 0.55, key: true },
+    { name: 'ice on its right shoulder', material: 'ice', hp: 4, at: [0.85, -0.85], y: 1.9, radius: 0.55, key: true },
+  ];
+}
+
+// Heron Marsh. A toad the size of a boat, crowned with reeds. Its hide is always wet.
+export class ReedToad extends Beast {
+  static label = 'Reed Toad';
+  static gift = 'sinew';
+  static fierce = true;
+  static radius = 1.7;
+  static sight = 11;
+  static cone = 1.6;
+  static hearing = 7;
+  static chargeSpeed = 2.4;
+  static reach = 4.2;            // its tongue
+  static strikeReach = 5;
+  static windup = 0.9;
+  static recover = 2.2;
+  static speed = 0.4;
+  static range = 4;
+  static parts = [
+    { name: 'left reed crown', material: 'moss', hp: 3.5, at: [-0.2, 0.9], y: 1.9, radius: 0.55, key: true },
+    { name: 'right reed crown', material: 'moss', hp: 3.5, at: [-0.2, -0.9], y: 1.9, radius: 0.55, key: true },
+    { name: 'throat', material: 'hide', hp: 5, at: [1.25, 0], y: 0.8, radius: 0.55, key: true },
+  ];
+}
+
+// Crimson Vale. Cranes whose wings are red maple leaves. They scatter at a breath.
+export class MapleCrane extends Beast {
+  static label = 'Maple Crane';
+  static gift = 'feather';
+  static radius = 0.55;
+  static sight = 18;
+  static hearing = 8;
+  static fleeSpeed = 10;
+  static fleeTime = 4;
+  static speed = 0.9;
+  static range = 7;
+  static parts = [
+    { name: 'leaf wings', material: 'bark', hp: 2, at: [0, 0], y: 1.4, radius: 0.5, key: true },
+  ];
+}
+
+// Blossom Field. It sleeps under Petal Pond until every shrine is awake.
+// It does not leave the water; it sends waves at whoever stands on the shore.
+export class ElderCarp extends Beast {
+  static label = 'Elder Carp';
+  static gift = 'scale';
+  static fierce = true;
+  static dormant = true;
+  static radius = 3.2;
+  static sight = 16;
+  static cone = 4;               // it sees all round
+  static hearing = 16;
+  static speed = 0;
+  static chargeSpeed = 0;
+  static reach = 13;             // its waves cross the pond
+  static strikeReach = 13;
+  static windup = 1.5;
+  static recover = 2.6;
+  static leash = 999;
+  static turn = 0.3;             // it turns slowly: circle the pond, or curve an arrow, to reach its far side
+  static parts = [
+    { name: 'scale', material: 'stone', hp: 4, at: [1.9, 1.05], y: 1.2, radius: 0.6, key: true },
+    { name: 'scale', material: 'stone', hp: 4, at: [1.9, -1.05], y: 1.2, radius: 0.6, key: true },
+    { name: 'scale', material: 'stone', hp: 4, at: [0, 1.4], y: 1.4, radius: 0.6, key: true },
+    { name: 'scale', material: 'stone', hp: 4, at: [0, -1.4], y: 1.4, radius: 0.6, key: true },
+    { name: 'scale', material: 'stone', hp: 4, at: [-1.9, 1.0], y: 1.2, radius: 0.6, key: true },
+    { name: 'scale', material: 'stone', hp: 4, at: [-1.9, -1.0], y: 1.2, radius: 0.6, key: true },
+  ];
+  // Its wave can be stepped through (Shift), and it quickens as its scales fall.
+  fight(dt, world) {
+    const broken = this.parts.filter(p => p.broken).length;
+    if (this.act === 'recover') this.timer -= dt * (broken >= 4 ? 0.8 : broken >= 2 ? 0.35 : 0);
+    super.fight(dt, world);
+  }
+}
+
+export const BEASTS = { MossbackOx, GinkgoStag, HollowBoar, FrostmaneBear, ReedToad, MapleCrane, ElderCarp };

@@ -12,12 +12,15 @@ export class Hollow extends Character {
   static windup = 0.6;
   static recover = 1.0;
   static strikeDamage = 1;
+  static leash = 26;          // how far from its post it will chase
 
   constructor(x = 0, z = 0, name = '') {
     super(x, z, name);
     this.sight = this.constructor.sight;
     this.state = State.IDLE;
     this.timer = 0;
+    this.home = null;          // [x, z] of the post it guards; null: it roams free
+    this.returning = false;
   }
   setState(state, timer = 0) { this.state = state; this.timer = timer; }
   onGuardBroken() { this.setState(State.RECOVER, this.constructor.openTime); }
@@ -27,6 +30,15 @@ export class Hollow extends Character {
     if (!this.canAct || this.isOpen) return;
     const target = world.archer;
     if (!target.alive) { this.setState(State.IDLE); return; }
+    if (this.home) {           // a posted Hollow gives up the chase and walks back
+      const fromHome = Math.hypot(this.x - this.home[0], this.z - this.home[1]);
+      if (fromHome > this.constructor.leash && !this.returning) { this.returning = true; world.emit('giveUp', this); }
+      if (this.returning) {
+        if (fromHome < 1.5) { this.returning = false; this.hp = this.maxHp; this.posture = 0; this.setState(State.IDLE); }
+        else { this.face(this.home[0], this.home[1]); this.stepTowards(this.home[0], this.home[1], dt, world); }
+        return;
+      }
+    }
     this.think(dt, world, this.distanceTo(target));
   }
 

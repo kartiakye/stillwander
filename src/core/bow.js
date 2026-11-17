@@ -12,6 +12,7 @@ export class Bow {
     this.charges = 0;
     this.drawing = false;
     this.held = 0;               // seconds the string has been held
+    this.quick = 1;              // a reed-sinew string draws faster
   }
 
   // ---- blessings
@@ -41,7 +42,7 @@ export class Bow {
   get power() { return Math.min(1, this.held / Bow.FULL_DRAW_TIME); }
   beginDraw() { this.drawing = true; this.held = 0; }
   cancel() { this.drawing = false; this.held = 0; }
-  update(dt) { if (this.drawing) this.held += dt; }
+  update(dt) { if (this.drawing) this.held += dt * this.quick; }
   loose(owner, angle) {          // the caller has already taken an arrow from the quiver
     const blessing = this.selected && this.charges > 0 ? this.selected : null;
     if (blessing) this.charges -= 1;
